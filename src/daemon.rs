@@ -387,6 +387,10 @@ impl Daemon {
         let me = self.me.clone();
         let text = match req {
             Req::Status => return Resp { ok: true, text: self.status() },
+            Req::ListNodes => {
+                let text = nodes_text(&self.cfg, |id| Some(self.peers.contains_key(id)), &self.pending);
+                return Resp { ok: true, text };
+            }
             Req::AddPath { path, is_dir } => {
                 self.cfg.set_root(&me, &path, is_dir, false);
                 format!("Now syncing {path}")
@@ -418,13 +422,7 @@ impl Daemon {
     }
 
     fn status(&self) -> String {
-        let mut s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)));
-        if !self.pending.is_empty() {
-            s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");
-            for (id, addr) in &self.pending {
-                s.push_str(&format!("  {}  {addr}\n", net::pretty_id(id)));
-            }
-        }
+        let mut s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
         let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some()).count();
         s.push_str(&format!(
             "\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
@@ -742,12 +740,41 @@ impl Daemon {
 }
 
 /// Status text. `connected` returns `None` when the daemon is not running.
-pub fn status_text(cfg: &Config, me: &str, connected: impl Fn(&str) -> Option<bool>) -> String {
+/// `pending` holds untrusted nodes that tried to connect (ID -> address).
+pub fn status_text(
+    cfg: &Config,
+    me: &str,
+    connected: impl Fn(&str) -> Option<bool>,
+    pending: &BTreeMap<String, String>,
+) -> String {
     let mut s = format!("This node: {}\nPort: {}\n", net::pretty_id(me), cfg.port);
     if connected(me).is_none() {
         s.push_str("Daemon: not running (start it with `rust-sync daemon`)\n");
     }
     s.push_str("\nNodes:\n");
+    s.push_str(&nodes_text(cfg, connected, pending));
+    s.push_str("\nPaths:\n");
+    s.push_str(&paths_text(cfg));
+    s
+}
+
+/// Synced files and folders. Folders end with `/`.
+pub fn paths_text(cfg: &Config) -> String {
+    let roots: Vec<_> = cfg.active_roots().collect();
+    if roots.is_empty() {
+        return "  (none) add one with `rust-sync path add <path>`\n".into();
+    }
+    roots.into_iter().map(|(p, r)| format!("  {p}{}\n", if r.is_dir { "/" } else { "" })).collect()
+}
+
+/// Trusted nodes with their address and connection state, then untrusted nodes
+/// waiting to be accepted. `connected` returns `None` when the daemon is not running.
+pub fn nodes_text(
+    cfg: &Config,
+    connected: impl Fn(&str) -> Option<bool>,
+    pending: &BTreeMap<String, String>,
+) -> String {
+    let mut s = String::new();
     let nodes: Vec<_> = cfg.shared.nodes.iter().filter(|(_, n)| !n.removed).collect();
     if nodes.is_empty() {
         s.push_str("  (none) add one with `rust-sync node add <host>`\n");
@@ -760,13 +787,11 @@ pub fn status_text(cfg: &Config, me: &str, connected: impl Fn(&str) -> Option<bo
         };
         s.push_str(&format!("  {}  {}  {state}\n", net::pretty_id(id), n.addr));
     }
-    s.push_str("\nPaths:\n");
-    let roots: Vec<_> = cfg.active_roots().collect();
-    if roots.is_empty() {
-        s.push_str("  (none) add one with `rust-sync add <path>`\n");
-    }
-    for (p, r) in roots {
-        s.push_str(&format!("  {p}{}\n", if r.is_dir { "/" } else { "" }));
+    if !pending.is_empty() {
+        s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");
+        for (id, addr) in pending {
+            s.push_str(&format!("  {}  {addr}\n", net::pretty_id(id)));
+        }
     }
     s
 }

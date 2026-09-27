@@ -35,8 +35,8 @@ rm -r ~/.rust-sync                       # optional: node key, config and index
 On machine A:
 
 ```sh
-rust-sync add ~/notes                    # a folder
-rust-sync add ~/.zshrc                   # or a single file
+rust-sync path add ~/notes               # a folder
+rust-sync path add ~/.zshrc              # or a single file
 rust-sync node add macmini               # shows B's ID and asks you to confirm
 ```
 
@@ -51,7 +51,7 @@ Use a hostname, Tailscale name or IP address. See
 names are the safest choice on macOS.
 
 That's it. B now syncs `~/notes` and `~/.zshrc`. The list of synced paths is
-shared, so `rust-sync add` on any machine applies everywhere.
+shared, so `rust-sync path add` on any machine applies everywhere.
 
 To add a third machine C, pair it with any one machine (both directions). The
 others learn about C from that machine and connect to it by themselves.
@@ -61,16 +61,19 @@ others learn about C from that machine and connect to it by themselves.
 | Command | Alias | What it does |
 |---|---|---|
 | `rust-sync daemon [--port N]` | | Run the sync process (default port 21987) |
-| `rust-sync add <path>` | | Start syncing a file or folder |
-| `rust-sync remove <path>` | `rm` | Stop syncing it. Files stay on disk |
+| `rust-sync path add <path>` | | Start syncing a file or folder |
+| `rust-sync path list` | `path ls` | Synced files and folders |
+| `rust-sync path remove <path>` | `path rm` | Stop syncing it. Files stay on disk |
 | `rust-sync node add <host[:port]> [--id ID] [-y]` | | Trust a node |
-| `rust-sync node remove <ID>` | | Stop trusting a node |
+| `rust-sync node list` | `node ls` | Trusted nodes, their addresses and connection state |
+| `rust-sync node remove <ID>` | `node rm` | Stop trusting a node |
 | `rust-sync service install` | | Start the daemon at login (and now) |
 | `rust-sync service uninstall` | | Stop it and stop starting it at login |
-| `rust-sync status` | `list` | Nodes, paths, connections, pending requests |
+| `rust-sync status` | | Nodes, paths, connections, pending requests |
 | `rust-sync id` | | This node's ID |
 
-If the daemon isn't running, `add`, `remove` and `node` edit the config file.
+If the daemon isn't running, `path add`, `path remove`, `node add` and
+`node remove` edit the config file.
 The changes take effect when the daemon starts.
 
 ## How it works

@@ -34,12 +34,12 @@ enum Cmd {
     },
     /// Show this node's ID.
     Id,
-    /// Start syncing a file or folder.
-    Add { path: PathBuf },
-    /// Stop syncing a file or folder. The files stay on disk.
-    #[command(visible_alias = "rm")]
-    Remove { path: PathBuf },
-    /// Add or remove nodes.
+    /// Add, list or remove synced files and folders.
+    Path {
+        #[command(subcommand)]
+        cmd: PathCmd,
+    },
+    /// Add, list or remove nodes.
     Node {
         #[command(subcommand)]
         cmd: NodeCmd,
@@ -50,17 +50,32 @@ enum Cmd {
         cmd: ServiceCmd,
     },
     /// Show nodes, synced paths and connection state.
-    #[command(visible_alias = "list")]
     Status,
+}
+
+#[derive(Subcommand)]
+enum PathCmd {
+    /// Start syncing a file or folder.
+    Add { path: PathBuf },
+    /// List synced files and folders.
+    #[command(visible_alias = "ls")]
+    List,
+    /// Stop syncing a file or folder. The files stay on disk.
+    #[command(visible_alias = "rm")]
+    Remove { path: PathBuf },
 }
 
 #[derive(Subcommand)]
 enum NodeCmd {
     /// Trust another node and sync with it.
     Add(NodeAdd),
+    /// List trusted nodes, their addresses and whether they are connected.
+    #[command(visible_alias = "ls")]
+    List,
     /// Stop trusting a node.
+    #[command(visible_alias = "rm")]
     Remove {
-        /// The node's ID, as shown by `rust-sync status`.
+        /// The node's ID, as shown by `rust-sync node list`.
         id: String,
     },
 }
@@ -100,7 +115,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             println!("{}", net::pretty_id(&my_keys()?.id()));
             Ok(())
         }
-        Cmd::Add { path } => {
+        Cmd::Path { cmd: PathCmd::Add { path } } => {
             let abs = std::fs::canonicalize(&path).with_context(|| format!("cannot find {}", path.display()))?;
             let is_dir = abs.is_dir();
             if !is_dir && !abs.is_file() {
@@ -111,13 +126,19 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
                 .with_context(|| format!("cannot sync {}", abs.display()))?;
             send(Req::AddPath { path: portable, is_dir }).await
         }
-        Cmd::Remove { path } => {
+        Cmd::Path { cmd: PathCmd::List } => {
+            // The daemon saves every change to the config file, so this is current either way.
+            print!("{}", daemon::paths_text(&Config::load(&config_path())?));
+            Ok(())
+        }
+        Cmd::Path { cmd: PathCmd::Remove { path } } => {
             // The path may be gone already, so do not require it to exist.
             let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::absolute(&path).unwrap_or(path));
             let portable = paths::to_portable(&abs).context("path is not valid UTF-8")?;
             send(Req::RemovePath { path: portable }).await
         }
         Cmd::Node { cmd: NodeCmd::Add(a) } => node_add(a).await,
+        Cmd::Node { cmd: NodeCmd::List } => send(Req::ListNodes).await,
         Cmd::Node { cmd: NodeCmd::Remove { id } } => {
             send(Req::RemoveNode { id: net::parse_id(&id).context("not a valid node ID")? }).await
         }
@@ -153,7 +174,12 @@ async fn send(req: Req) -> anyhow::Result<()> {
     let mut cfg = Config::load(&config_path())?;
     let text = match req {
         Req::Status => {
-            print!("{}", daemon::status_text(&cfg, &me, |_| None));
+            print!("{}", daemon::status_text(&cfg, &me, |_| None, &Default::default()));
+            return Ok(());
+        }
+        Req::ListNodes => {
+            print!("{}", daemon::nodes_text(&cfg, |_| None, &Default::default()));
+            println!("\n(The daemon is not running, so connection state is unknown.)");
             return Ok(());
         }
         Req::AddPath { path, is_dir } => {

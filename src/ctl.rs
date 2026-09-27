@@ -14,6 +14,7 @@ pub enum Req {
     RemovePath { path: String },
     AddNode { id: String, addr: String },
     RemoveNode { id: String },
+    ListNodes,
     Status,
 }
 

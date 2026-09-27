@@ -11,15 +11,16 @@ Built for macOS. It uses about 8–10 MB of RAM and no CPU when nothing changes.
 You need [Rust](https://rustup.rs). On every machine:
 
 ```sh
-cargo install --locked --git https://github.com/ravshansbox/rust-sync
+cargo install --locked --force --git https://github.com/ravshansbox/rust-sync
 rust-sync service install                # start now and at every login
 ```
 
-This puts `rust-sync` in `~/.cargo/bin`. To run the daemon in a terminal
-instead, use `rust-sync daemon`.
+This puts `rust-sync` in `~/.cargo/bin`. `--force` makes cargo rebuild even if
+this version is already installed, so the same command also upgrades or
+reinstalls. To run the daemon in a terminal instead, use `rust-sync daemon`.
 
-**Upgrade:** run the same `cargo install` command, then `rust-sync service install`
-again to restart the daemon on the new version.
+**Upgrade or reinstall:** run both commands again. The second one restarts the
+daemon on the new binary.
 
 **Uninstall:**
 

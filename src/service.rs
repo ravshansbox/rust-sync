@@ -55,12 +55,12 @@ pub async fn install() -> anyhow::Result<()> {
         launchctl(&args)?;
     }
 
-    println!("Installed. rust-sync now starts at login, and it is running now.");
-    println!("  Launcher: {}", plist.display());
-    println!("  Log:      {}", log_path().display());
-    println!("  Binary:   {}", exe.display());
+    outln!("Installed. rust-sync now starts at login, and it is running now.");
+    outln!("  Launcher: {}", plist.display());
+    outln!("  Log:      {}", log_path().display());
+    outln!("  Binary:   {}", exe.display());
     if exe.components().any(|c| c.as_os_str() == "target") {
-        println!(
+        outln!(
             "\nNote: this binary is in a Cargo build folder, so `cargo clean` would break the launcher.\n\
              Consider copying it somewhere stable (for example ~/.local/bin) and running\n\
              `rust-sync service install` from there."
@@ -71,12 +71,12 @@ pub async fn install() -> anyhow::Result<()> {
 
 pub async fn uninstall() -> anyhow::Result<()> {
     if !installed() {
-        println!("Not installed.");
+        outln!("Not installed.");
         return Ok(());
     }
     stop()?;
     std::fs::remove_file(plist_path())?;
-    println!("Uninstalled. rust-sync no longer starts at login. Your config and synced files are unchanged.");
+    outln!("Uninstalled. rust-sync no longer starts at login. Your config and synced files are unchanged.");
     Ok(())
 }
 

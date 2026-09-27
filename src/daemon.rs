@@ -10,7 +10,7 @@ use crate::log::{self, log};
 use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
@@ -35,6 +35,9 @@ const RESCAN_TICKS: u64 = 30;
 const IDLE_LIMIT: Duration = Duration::from_secs(95);
 const MAX_DOWNLOADS: usize = 8;
 const MAX_UPLOADS: usize = 8;
+/// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
+/// connection attempts can't grow the list without end.
+const MAX_PENDING: usize = 20;
 /// Happy Eyeballs (RFC 8305): start the next address after this long, without
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
@@ -89,6 +92,8 @@ struct Daemon {
     backoff: HashMap<String, Duration>,
     /// Untrusted nodes that tried to connect: ID -> address.
     pending: BTreeMap<String, String>,
+    /// IDs in `pending`, oldest first.
+    pending_order: VecDeque<String>,
     downloads: HashMap<String, Download>,
     queued: BTreeMap<String, (String, FileMeta)>,
     uploads: Arc<Semaphore>,
@@ -178,6 +183,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         dialling: HashSet::new(),
         backoff: HashMap::new(),
         pending: BTreeMap::new(),
+        pending_order: VecDeque::new(),
         downloads: HashMap::new(),
         queued: BTreeMap::new(),
         uploads: Arc::new(Semaphore::new(MAX_UPLOADS)),
@@ -230,8 +236,11 @@ impl Daemon {
             Event::Auth { id, addr, reply } => {
                 let ok = self.cfg.trusted(&id).is_some();
                 if let (false, Some(addr)) = (ok, addr) {
-                    log!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
-                    self.pending.insert(id, addr);
+                    // Log each node once, so repeated attempts don't flood the log.
+                    if !self.pending.contains_key(&id) {
+                        log!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
+                    }
+                    self.add_pending(id, addr);
                 }
                 let _ = reply.send(ok);
             }
@@ -281,7 +290,7 @@ impl Daemon {
         }
         log!("connected to {}", net::pretty_id(&id));
         self.backoff.remove(&id);
-        self.pending.remove(&id);
+        self.remove_pending(&id);
         let _ = peer.ctl.send(Msg::Config(self.cfg.shared.clone()));
         let entries: Vec<Entry> = self
             .index
@@ -296,6 +305,22 @@ impl Daemon {
     }
 
     /// Dial every trusted node we are not connected to, except those waiting to retry.
+    fn add_pending(&mut self, id: String, addr: String) {
+        self.pending_order.retain(|x| *x != id);
+        self.pending_order.push_back(id.clone());
+        self.pending.insert(id, addr);
+        while self.pending_order.len() > MAX_PENDING {
+            if let Some(oldest) = self.pending_order.pop_front() {
+                self.pending.remove(&oldest);
+            }
+        }
+    }
+
+    fn remove_pending(&mut self, id: &str) {
+        self.pending.remove(id);
+        self.pending_order.retain(|x| x != id);
+    }
+
     fn dial_all(&mut self) {
         let ids: Vec<String> = self
             .cfg
@@ -420,7 +445,7 @@ impl Daemon {
             }
             Req::AddNode { id, addr } => {
                 self.cfg.set_node(&me, &id, &addr, false);
-                self.pending.remove(&id);
+                self.remove_pending(&id);
                 self.backoff.remove(&id);
                 format!("Added node {}", net::pretty_id(&id))
             }

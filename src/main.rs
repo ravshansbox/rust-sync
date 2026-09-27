@@ -1,3 +1,15 @@
+/// `print!` for CLI output. If stdout is closed early, as in `rust-sync node list | head -1`,
+/// exit quietly instead of panicking with "Broken pipe".
+macro_rules! out {
+    ($($arg:tt)*) => { $crate::write_stdout(format_args!($($arg)*)) };
+}
+
+/// `println!` for CLI output, see `out!`.
+macro_rules! outln {
+    () => { out!("\n") };
+    ($($arg:tt)*) => { out!("{}\n", format_args!($($arg)*)) };
+}
+
 mod config;
 mod ctl;
 mod daemon;
@@ -116,7 +128,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Daemon { port, log_file } => daemon::run(port, log_file).await,
         Cmd::Id => {
-            println!("{}", net::pretty_id(&my_keys()?.id()));
+            outln!("{}", net::pretty_id(&my_keys()?.id()));
             Ok(())
         }
         Cmd::Path { cmd: PathCmd::Add { path } } => {
@@ -132,7 +144,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         }
         Cmd::Path { cmd: PathCmd::List } => {
             // The daemon saves every change to the config file, so this is current either way.
-            print!("{}", daemon::paths_text(&Config::load(&config_path())?));
+            out!("{}", daemon::paths_text(&Config::load(&config_path())?));
             Ok(())
         }
         Cmd::Path { cmd: PathCmd::Remove { path } } => {
@@ -151,9 +163,19 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Status => {
             send(Req::Status).await?;
             let login = if service::installed() { "yes" } else { "no (`rust-sync service install`)" };
-            println!("Starts at login: {login}");
+            outln!("Starts at login: {login}");
             Ok(())
         }
+    }
+}
+
+fn write_stdout(args: std::fmt::Arguments) {
+    let mut stdout = std::io::stdout().lock();
+    if let Err(e) = stdout.write_fmt(args).and_then(|()| stdout.flush()) {
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            eprintln!("error: cannot write output: {e}");
+        }
+        std::process::exit(if e.kind() == std::io::ErrorKind::BrokenPipe { 0 } else { 1 });
     }
 }
 
@@ -171,19 +193,19 @@ async fn send(req: Req) -> anyhow::Result<()> {
         if !resp.ok {
             bail!("{}", resp.text);
         }
-        println!("{}", resp.text.trim_end());
+        outln!("{}", resp.text.trim_end());
         return Ok(());
     }
     let me = my_keys()?.id();
     let mut cfg = Config::load(&config_path())?;
     let text = match req {
         Req::Status => {
-            print!("{}", daemon::status_text(&cfg, &me, |_| None, &Default::default()));
+            out!("{}", daemon::status_text(&cfg, &me, |_| None, &Default::default()));
             return Ok(());
         }
         Req::ListNodes => {
-            print!("{}", daemon::nodes_text(&cfg, |_| None, &Default::default()));
-            println!("\n(The daemon is not running, so connection state is unknown.)");
+            out!("{}", daemon::nodes_text(&cfg, |_| None, &Default::default()));
+            outln!("\n(The daemon is not running, so connection state is unknown.)");
             return Ok(());
         }
         Req::AddPath { path, is_dir } => {
@@ -207,7 +229,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
         }
     };
     cfg.save(&config_path())?;
-    println!("{text}\n(The daemon is not running. This takes effect when it starts.)");
+    outln!("{text}\n(The daemon is not running. This takes effect when it starts.)");
     Ok(())
 }
 
@@ -218,7 +240,7 @@ async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     let addr = config::with_port(&a.addr);
     let expected = a.id.as_deref().map(|s| net::parse_id(s).context("not a valid node ID")).transpose()?;
 
-    println!("Connecting to {addr}...");
+    outln!("Connecting to {addr}...");
     let stream = timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(&addr))
         .await
         .context("timed out")?
@@ -233,25 +255,25 @@ async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
         Ok(Ok(Msg::Hello { trusts_you: true, .. }))
     );
 
-    println!("Node ID: {}", net::pretty_id(&id));
+    outln!("Node ID: {}", net::pretty_id(&id));
     match expected {
         Some(e) if e != id => bail!("that is not the ID you gave ({}). Node not added.", net::pretty_id(&e)),
         Some(_) => {}
         None if a.yes => {}
         None => {
-            print!("Check this matches `rust-sync id` on that machine. Trust it? [y/N] ");
+            out!("Check this matches `rust-sync id` on that machine. Trust it? [y/N] ");
             std::io::stdout().flush()?;
             let mut answer = String::new();
             std::io::stdin().read_line(&mut answer)?;
             if !answer.trim().eq_ignore_ascii_case("y") {
-                println!("Node not added.");
+                outln!("Node not added.");
                 return Ok(());
             }
         }
     }
     send(Req::AddNode { id, addr }).await?;
     if !trusts_us {
-        println!(
+        outln!(
             "\nThat node does not trust this one yet. On that machine, run\n  \
              rust-sync node add <address of this machine>\nand check it shows this ID:\n  {}",
             net::pretty_id(&keys.id())

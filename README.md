@@ -148,3 +148,7 @@ Source: Apple, [TN3179: Understanding local network privacy](https://developer.a
   (`*.rsync-tmp`) and `.DS_Store` are ignored.
 - **Every node connects to every other node.** This is fine for a handful of machines.
 - **Logs have no timestamps**, and the log file isn't rotated.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).

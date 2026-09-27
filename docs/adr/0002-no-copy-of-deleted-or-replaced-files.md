@@ -28,7 +28,7 @@ files it deletes or replaces because of a peer's change.
 - rust-sync is not a backup. Synced machines copy each other's mistakes, so
   another backup (for example Time Machine) is still needed.
 - No extra disk space is used, and no trash needs cleaning up.
-- The README doesn't mention this yet.
+- The README's Limits section says so: "It's not a backup."
 
 ## If we revisit this
 

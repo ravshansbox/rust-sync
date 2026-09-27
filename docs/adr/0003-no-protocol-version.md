@@ -30,7 +30,7 @@ Accept this risk and keep the current protocol, with no version.
 - All nodes must run the same rust-sync version. After an upgrade that changes
   the message format, upgrade every machine, or they stop syncing with confusing
   errors in the log.
-- The README doesn't mention this yet.
+- The README's Limits section says so: "Every node must run the same version."
 - Adding a version later will itself be a breaking change. Nodes without it
   can't talk to nodes with it, so every node must be upgraded at the same time
   once.

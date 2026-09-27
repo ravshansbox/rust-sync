@@ -46,7 +46,14 @@ pub async fn install() -> anyhow::Result<()> {
     std::fs::create_dir_all(plist.parent().unwrap())?;
     std::fs::create_dir_all(log_path().parent().unwrap())?;
     std::fs::write(&plist, plist_xml(&exe))?;
-    launchctl(&["bootstrap", &domain()?, plist.to_str().context("path is not valid UTF-8")?])?;
+    let args = ["bootstrap", &domain()?, plist.to_str().context("path is not valid UTF-8")?];
+    if launchctl(&args).is_err() {
+        // launchd sometimes refuses with "5: Input/output error", for example while an
+        // agent with the same label is still unloading. Clear it and try once more.
+        stop()?;
+        std::thread::sleep(Duration::from_secs(1));
+        launchctl(&args)?;
+    }
 
     println!("Installed. rust-sync now starts at login, and it is running now.");
     println!("  Launcher: {}", plist.display());
@@ -117,6 +124,8 @@ fn plist_xml(exe: &Path) -> String {
   <array>
     <string>{exe}</string>
     <string>daemon</string>
+    <string>--log-file</string>
+    <string>{log}</string>
   </array>
 {env}  <key>RunAtLoad</key>
   <true/>
@@ -126,10 +135,6 @@ fn plist_xml(exe: &Path) -> String {
     <key>SuccessfulExit</key>
     <false/>
   </dict>
-  <key>StandardOutPath</key>
-  <string>{log}</string>
-  <key>StandardErrorPath</key>
-  <string>{log}</string>
 </dict>
 </plist>
 "#

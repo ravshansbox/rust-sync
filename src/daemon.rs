@@ -6,6 +6,7 @@ use crate::config::{self, Config, Shared};
 use crate::ctl::{self, Req, Resp};
 use crate::index::{self, Action, Entry, FileMeta, Index, Order, Vv};
 use crate::net::{self, Keys, Msg};
+use crate::log::{self, log};
 use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -99,7 +100,21 @@ struct Daemon {
     ticks: u64,
 }
 
-pub async fn run(port: Option<u16>) -> anyhow::Result<()> {
+/// Run the daemon. With `log_file`, log lines go there (rotated) instead of stderr.
+pub async fn run(port: Option<u16>, log_file: Option<PathBuf>) -> anyhow::Result<()> {
+    if let Some(path) = log_file {
+        log::to_file(path.clone()).with_context(|| format!("cannot open log file {}", path.display()))?;
+    }
+    // Under launchd nobody sees stderr, so panics go to the log too.
+    std::panic::set_hook(Box::new(|info| log!("panic: {info}")));
+    let res = run_inner(port).await;
+    if let Err(e) = &res {
+        log!("error: {e:#}");
+    }
+    res
+}
+
+async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     let dir = paths::state_dir();
     std::fs::create_dir_all(dir)?;
     if ctl::call(&Req::Status).await?.is_some() {
@@ -173,8 +188,8 @@ pub async fn run(port: Option<u16>) -> anyhow::Result<()> {
         index_dirty: false,
         ticks: 0,
     };
-    eprintln!("rust-sync node {}", net::pretty_id(&d.me));
-    eprintln!("listening on port {}", d.cfg.port);
+    log!("rust-sync node {}", net::pretty_id(&d.me));
+    log!("listening on port {}", d.cfg.port);
     d.reconcile_watches();
     d.rescan_all();
     d.outbox.clear();
@@ -189,7 +204,7 @@ pub async fn run(port: Option<u16>) -> anyhow::Result<()> {
         d.flush();
     }
 
-    eprintln!("stopping");
+    log!("stopping");
     for p in d.downloads.keys().cloned().collect::<Vec<_>>() {
         d.cancel_download(&p);
     }
@@ -215,7 +230,7 @@ impl Daemon {
             Event::Auth { id, addr, reply } => {
                 let ok = self.cfg.trusted(&id).is_some();
                 if let (false, Some(addr)) = (ok, addr) {
-                    eprintln!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
+                    log!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
                     self.pending.insert(id, addr);
                 }
                 let _ = reply.send(ok);
@@ -225,7 +240,7 @@ impl Daemon {
                 if self.peers.get(&id).is_some_and(|p| p.conn == conn) {
                     self.peers.remove(&id);
                     self.drop_downloads_from(&id);
-                    eprintln!("disconnected from {}", net::pretty_id(&id));
+                    log!("disconnected from {}", net::pretty_id(&id));
                     self.redial_after(id, Duration::from_secs(1));
                 }
             }
@@ -264,7 +279,7 @@ impl Daemon {
             }
             self.drop_downloads_from(&id);
         }
-        eprintln!("connected to {}", net::pretty_id(&id));
+        log!("connected to {}", net::pretty_id(&id));
         self.backoff.remove(&id);
         self.pending.remove(&id);
         let _ = peer.ctl.send(Msg::Config(self.cfg.shared.clone()));
@@ -361,7 +376,7 @@ impl Daemon {
 
     fn config_changed(&mut self, before: HashSet<String>) {
         if let Err(e) = self.cfg.save(&paths::state_dir().join("config.json")) {
-            eprintln!("cannot save config: {e}");
+            log!("cannot save config: {e}");
         }
         let gone: Vec<String> = self.peers.keys().filter(|id| self.cfg.trusted(id).is_none()).cloned().collect();
         for id in gone {
@@ -370,7 +385,7 @@ impl Daemon {
         }
         self.reconcile_watches();
         for root in self.active_roots().difference(&before) {
-            eprintln!("now syncing {root}");
+            log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
             let known: Vec<Entry> = index::under(&self.index, root)
@@ -460,7 +475,7 @@ impl Daemon {
             }
             match self.watcher.watch(&p, m) {
                 Ok(()) => drop(self.watched.insert(p, m)),
-                Err(e) => eprintln!("cannot watch {}: {e}", p.display()),
+                Err(e) => log!("cannot watch {}: {e}", p.display()),
             }
         }
     }
@@ -565,7 +580,7 @@ impl Daemon {
         }
         match index::save(&self.index, &paths::state_dir().join("index.bin")) {
             Ok(()) => self.index_dirty = false,
-            Err(e) => eprintln!("cannot save index: {e}"),
+            Err(e) => log!("cannot save index: {e}"),
         }
     }
 
@@ -597,9 +612,9 @@ impl Daemon {
             Action::Take | Action::Conflict if same_content => self.adopt(p, lp, local, r),
             Action::Take | Action::Conflict if r.deleted() => {
                 match std::fs::remove_file(lp) {
-                    Ok(()) => eprintln!("deleted {p}"),
+                    Ok(()) => log!("deleted {p}"),
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return eprintln!("cannot delete {p}: {e}"),
+                    Err(e) => return log!("cannot delete {p}: {e}"),
                 }
                 self.set_entry(p, r);
             }
@@ -611,18 +626,18 @@ impl Daemon {
                     {
                         let copy = conflict_name(lp, l);
                         match std::fs::rename(lp, &copy) {
-                            Ok(()) => eprintln!("conflict: kept local version of {p} as {}", copy.display()),
+                            Ok(()) => log!("conflict: kept local version of {p} as {}", copy.display()),
                             Err(e) => {
                                 let _ = std::fs::remove_file(&t);
-                                return eprintln!("cannot keep conflict copy of {p}: {e}");
+                                return log!("cannot keep conflict copy of {p}: {e}");
                             }
                         }
                     }
                     if let Err(e) = std::fs::rename(&t, lp) {
                         let _ = std::fs::remove_file(&t);
-                        return eprintln!("cannot write {p}: {e}");
+                        return log!("cannot write {p}: {e}");
                     }
-                    eprintln!("updated {p}");
+                    log!("updated {p}");
                     self.set_entry(p, r);
                 }
             },
@@ -666,7 +681,7 @@ impl Daemon {
         let tmp = parent.join(format!(".{}.rsync-tmp", name.to_string_lossy()));
         let file = match std::fs::create_dir_all(parent).and_then(|()| File::create(&tmp)) {
             Ok(f) => f,
-            Err(e) => return eprintln!("cannot create {}: {e}", tmp.display()),
+            Err(e) => return log!("cannot create {}: {e}", tmp.display()),
         };
         let _ = peer.ctl.send(Msg::Request { path: p.to_string(), hash: r.hash.unwrap() });
         let d = Download { from: from.to_string(), meta: r, tmp, file, hasher: blake3::Hasher::new(), written: 0 };
@@ -702,7 +717,7 @@ impl Daemon {
         }
         let d = self.downloads.remove(&path).unwrap();
         if Some(*d.hasher.finalize().as_bytes()) != d.meta.hash {
-            eprintln!("{path} changed while being sent; will retry");
+            log!("{path} changed while being sent; will retry");
             let _ = std::fs::remove_file(&d.tmp);
             return;
         }
@@ -899,9 +914,9 @@ async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::
             } else {
                 ""
             };
-            eprintln!("cannot reach {} at {addr}: {e}{hint}", net::pretty_id(&id));
+            log!("cannot reach {} at {addr}: {e}{hint}", net::pretty_id(&id));
         }
-        Err(_) if !quiet => eprintln!("cannot reach {} at {addr}: timed out", net::pretty_id(&id)),
+        Err(_) if !quiet => log!("cannot reach {} at {addr}: timed out", net::pretty_id(&id)),
         _ => {}
     }
     let _ = tx.send(Event::DialDone { id });
@@ -951,7 +966,7 @@ async fn connection(
     port: u16,
 ) {
     if let Err(e) = connection_inner(s, ip, expect, keys, tx, port).await {
-        eprintln!("connection with {ip}: {e:#}");
+        log!("connection with {ip}: {e:#}");
     }
 }
 
@@ -995,7 +1010,7 @@ async fn connection_inner(
         return Ok(());
     }
     if !trusts_us {
-        eprintln!("node {} does not trust this node yet", net::pretty_id(&id));
+        log!("node {} does not trust this node yet", net::pretty_id(&id));
         return Ok(());
     }
 

@@ -2,6 +2,7 @@ mod config;
 mod ctl;
 mod daemon;
 mod index;
+mod log;
 mod net;
 mod paths;
 mod service;
@@ -31,6 +32,9 @@ enum Cmd {
         /// Port to listen on (saved for next time).
         #[arg(long)]
         port: Option<u16>,
+        /// Write the log to this file instead of the terminal. It is rotated at 1 MiB.
+        #[arg(long)]
+        log_file: Option<PathBuf>,
     },
     /// Show this node's ID.
     Id,
@@ -110,7 +114,7 @@ async fn main() {
 
 async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
-        Cmd::Daemon { port } => daemon::run(port).await,
+        Cmd::Daemon { port, log_file } => daemon::run(port, log_file).await,
         Cmd::Id => {
             println!("{}", net::pretty_id(&my_keys()?.id()));
             Ok(())

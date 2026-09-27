@@ -113,11 +113,17 @@ rust-sync service install
 
 This installs a per-user launchd agent
 (`~/Library/LaunchAgents/com.github.ravshansbox.rust-sync.plist`) that runs
-`rust-sync daemon` at login and restarts it if it crashes. The log is in
-`~/Library/Logs/rust-sync.log`. Run `service install` again after moving or
-upgrading the binary. If you build from source, copy the binary somewhere stable
-first, because the agent runs it from where it was when you installed. `rust-sync service uninstall` removes the agent and leaves your config
-and files alone.
+`rust-sync daemon` at login and restarts it if it crashes. Run `service install`
+again after moving or upgrading the binary. If you build from source, copy the
+binary somewhere stable first, because the agent runs it from where it was when
+you installed. `rust-sync service uninstall` removes the agent and leaves your
+config and files alone.
+
+**Log:** `~/Library/Logs/rust-sync.log`. Each line starts with the time in UTC.
+At 1 MiB the file is renamed to `rust-sync.log.1`, replacing the older one, so
+the log never takes more than about 2 MiB. When you run `rust-sync daemon` in a
+terminal, the log goes to the terminal instead, or to a file with
+`--log-file <path>`.
 
 A launchd agent is not exempt from Local Network privacy (below). Use Tailscale
 names for nodes, or allow the prompt if macOS shows one.
@@ -139,15 +145,34 @@ Source: Apple, [TN3179: Understanding local network privacy](https://developer.a
 
 ## Limits
 
+These are known and accepted for now. The [decision records](docs/adr/README.md)
+explain each one.
+
+- **It's not a backup.** When a peer deletes or changes a file, rust-sync
+  deletes or overwrites your copy and keeps nothing. A mistake on one machine,
+  such as deleting a folder, reaches every machine within seconds. Keep a
+  separate backup, for example Time Machine.
+  ([ADR 0002](docs/adr/0002-no-copy-of-deleted-or-replaced-files.md))
 - **Trust is transitive.** A trusted node can introduce new nodes and add paths
   to sync, including paths outside your home folder. Only pair machines you control.
-- **Whole-file transfers.** A small change to a large file sends the whole file again.
-- **Hashing is on the main thread.** While a very large file is being hashed,
-  network traffic waits.
+  ([ADR 0001](docs/adr/0001-peers-can-choose-synced-paths.md))
+- **Every node must run the same version.** Nodes don't tell each other which
+  version they run. After an upgrade that changes how nodes talk, a node left on
+  the old version stops syncing, with confusing errors in its log. Upgrade all
+  machines together. ([ADR 0003](docs/adr/0003-no-protocol-version.md))
+- **No automated tests.** Changes are checked by hand.
+  ([ADR 0004](docs/adr/0004-no-automated-tests.md))
+- **Large files are slow.** A small change to a large file sends the whole file
+  again, and while a large file is being hashed the daemon does nothing else.
+  ([ADR 0005](docs/adr/0005-large-files-not-optimised.md))
+- **The clock decides conflicts.** When two machines change the same file at the
+  same time, the change with the later file time wins, so a machine with a wrong
+  clock can win when it shouldn't. The other version is still kept as a conflict
+  copy.
+- **macOS only.** It may work on Linux, but that isn't tested.
 - **Not synced:** empty folders, symlinks, extended attributes. Temporary files
   (`*.rsync-tmp`) and `.DS_Store` are ignored.
 - **Every node connects to every other node.** This is fine for a handful of machines.
-- **Logs have no timestamps**, and the log file isn't rotated.
 
 ## Licence
 

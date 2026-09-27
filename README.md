@@ -19,8 +19,8 @@ This puts `rust-sync` in `~/.cargo/bin`. `--force` makes cargo rebuild even if
 this version is already installed, so the same command also upgrades or
 reinstalls. To run the daemon in a terminal instead, use `rust-sync daemon`.
 
-**Upgrade or reinstall:** run both commands again. The second one restarts the
-daemon on the new binary.
+**Upgrade or reinstall:** run the `cargo install` command again, then
+`rust-sync service restart` to run the new binary.
 
 **Uninstall:**
 
@@ -69,6 +69,9 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync node remove <ID>` | `node rm` | Stop trusting a node |
 | `rust-sync service install` | | Start the daemon at login (and now) |
 | `rust-sync service uninstall` | | Stop it and stop starting it at login |
+| `rust-sync service start` | | Start the daemon now |
+| `rust-sync service stop` | | Stop the daemon now; it starts again at the next login |
+| `rust-sync service restart` | | Stop and start it, for example after an upgrade |
 | `rust-sync status` | | Nodes, paths, connections, pending requests |
 | `rust-sync id` | | This node's ID |
 
@@ -113,11 +116,17 @@ rust-sync service install
 
 This installs a per-user launchd agent
 (`~/Library/LaunchAgents/com.github.ravshansbox.rust-sync.plist`) that runs
-`rust-sync daemon` at login and restarts it if it crashes. Run `service install`
-again after moving or upgrading the binary. If you build from source, copy the
-binary somewhere stable first, because the agent runs it from where it was when
-you installed. `rust-sync service uninstall` removes the agent and leaves your
-config and files alone.
+`rust-sync daemon` at login and restarts it if it crashes.
+
+- `rust-sync service stop` pauses syncing: the daemon stops and stays stopped
+  until `rust-sync service start` or the next login.
+- `rust-sync service restart` runs the current binary, for example after an
+  upgrade.
+- Run `service install` again after **moving** the binary, because the agent
+  runs it from where it was when you installed. If you build from source, copy
+  the binary somewhere stable first.
+- `rust-sync service uninstall` removes the agent and leaves your config and
+  files alone.
 
 **Log:** `~/Library/Logs/rust-sync.log`. Each line starts with the time in UTC.
 At 1 MiB the file is renamed to `rust-sync.log.1`, replacing the older one, so

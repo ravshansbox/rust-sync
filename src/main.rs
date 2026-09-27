@@ -102,6 +102,12 @@ enum ServiceCmd {
     Install,
     /// Stop the daemon and remove the launchd agent.
     Uninstall,
+    /// Start the daemon now.
+    Start,
+    /// Stop the daemon now. It starts again at the next login.
+    Stop,
+    /// Stop and start the daemon, for example after an upgrade.
+    Restart,
 }
 
 #[derive(Args)]
@@ -160,6 +166,9 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         }
         Cmd::Service { cmd: ServiceCmd::Install } => service::install().await,
         Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall().await,
+        Cmd::Service { cmd: ServiceCmd::Start } => service::start().await,
+        Cmd::Service { cmd: ServiceCmd::Stop } => service::stop().await,
+        Cmd::Service { cmd: ServiceCmd::Restart } => service::restart().await,
         Cmd::Status => {
             send(Req::Status).await?;
             let login = if service::installed() { "yes" } else { "no (`rust-sync service install`)" };

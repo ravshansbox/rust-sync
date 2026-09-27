@@ -37,7 +37,7 @@ pub async fn install() -> anyhow::Result<()> {
     let exe = std::env::current_exe()?;
     if installed() {
         // Replace the old agent, so a new binary path or setting takes effect.
-        stop()?;
+        unload()?;
     }
     if ctl::call(&Req::Status).await?.is_some() {
         bail!("a daemon is already running. Stop it first (Ctrl-C where it runs), then run this again.");
@@ -50,7 +50,7 @@ pub async fn install() -> anyhow::Result<()> {
     if launchctl(&args).is_err() {
         // launchd sometimes refuses with "5: Input/output error", for example while an
         // agent with the same label is still unloading. Clear it and try once more.
-        stop()?;
+        unload()?;
         std::thread::sleep(Duration::from_secs(1));
         launchctl(&args)?;
     }
@@ -74,14 +74,107 @@ pub async fn uninstall() -> anyhow::Result<()> {
         outln!("Not installed.");
         return Ok(());
     }
-    stop()?;
+    unload()?;
     std::fs::remove_file(plist_path())?;
     outln!("Uninstalled. rust-sync no longer starts at login. Your config and synced files are unchanged.");
     Ok(())
 }
 
+/// Stop the daemon now. It stays installed and starts again at the next login.
+pub async fn stop() -> anyhow::Result<()> {
+    if !installed() {
+        bail!("not installed. Run `rust-sync service install` first.");
+    }
+    if !running().await? {
+        outln!("Not running.");
+        return Ok(());
+    }
+    stop_now().await?;
+    outln!("Stopped. It starts again at the next login, or with `rust-sync service start`.");
+    Ok(())
+}
+
+/// Start the daemon now, if it is installed and not running.
+pub async fn start() -> anyhow::Result<()> {
+    if !installed() {
+        bail!("not installed. Run `rust-sync service install` first.");
+    }
+    if running().await? {
+        outln!("Already running.");
+        return Ok(());
+    }
+    start_now().await?;
+    outln!("Started.");
+    Ok(())
+}
+
+/// Stop and start the daemon, for example to run an upgraded binary.
+pub async fn restart() -> anyhow::Result<()> {
+    if !installed() {
+        bail!("not installed. Run `rust-sync service install` first.");
+    }
+    if running().await? {
+        stop_now().await?;
+    }
+    start_now().await?;
+    outln!("Restarted.");
+    Ok(())
+}
+
+/// Ask the daemon to exit cleanly. The agent only restarts it after a crash
+/// (`KeepAlive` / `SuccessfulExit` = false), so it stays stopped.
+async fn stop_now() -> anyhow::Result<()> {
+    if loaded()? {
+        let _ = launchctl(&["kill", "SIGTERM", &target()?]);
+    }
+    if !wait_for(false).await? {
+        bail!("still running. If you started it with `rust-sync daemon`, stop it there with Ctrl-C.");
+    }
+    Ok(())
+}
+
+async fn start_now() -> anyhow::Result<()> {
+    if loaded()? {
+        launchctl(&["kickstart", &target()?])?;
+    } else {
+        // Not loaded, for example after `launchctl bootout`. Loading it starts it (`RunAtLoad`).
+        let plist = plist_path();
+        launchctl(&["bootstrap", &domain()?, plist.to_str().context("path is not valid UTF-8")?])?;
+    }
+    if !wait_for(true).await? {
+        bail!("did not start. See the log: {}", log_path().display());
+    }
+    Ok(())
+}
+
+/// The agent's launchd name, e.g. `gui/501/com.github.ravshansbox.rust-sync`.
+fn target() -> anyhow::Result<String> {
+    Ok(format!("{}/{LABEL}", domain()?))
+}
+
+/// Whether launchd has the agent loaded (whether or not it is running).
+fn loaded() -> anyhow::Result<bool> {
+    let out = Command::new("launchctl").args(["print", &target()?]).output().context("cannot run launchctl")?;
+    Ok(out.status.success())
+}
+
+async fn running() -> anyhow::Result<bool> {
+    Ok(ctl::call(&Req::Status).await?.is_some())
+}
+
+/// Wait up to 5 seconds for the daemon to be running (or stopped).
+async fn wait_for(want: bool) -> anyhow::Result<bool> {
+    for _ in 0..50 {
+        if running().await? == want {
+            return Ok(true);
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Ok(false)
+}
+
 /// Unload the agent and wait until the daemon has exited.
-fn stop() -> anyhow::Result<()> {
+fn unload() -> anyhow::Result<()> {
     // Fails harmlessly if the agent is not loaded.
     let _ = Command::new("launchctl").args(["bootout", &format!("{}/{LABEL}", domain()?)]).output();
     for _ in 0..50 {

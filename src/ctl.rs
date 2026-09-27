@@ -53,5 +53,9 @@ pub async fn call(req: &Req) -> anyhow::Result<Option<Resp>> {
     w.write_all(line.as_bytes()).await?;
     let mut reply = String::new();
     BufReader::new(r).read_line(&mut reply).await?;
+    if reply.is_empty() {
+        // The daemon closed the connection without answering: it is shutting down.
+        return Ok(None);
+    }
     Ok(Some(serde_json::from_str(&reply)?))
 }

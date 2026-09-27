@@ -6,28 +6,48 @@ files, not only folders.
 
 Built for macOS. It uses about 8–10 MB of RAM and no CPU when nothing changes.
 
-## Quick start
+## Install
 
-On every machine:
+You need [Rust](https://rustup.rs). On every machine:
 
 ```sh
-cargo build --release
-./target/release/rust-sync daemon        # keep this running
+cargo install --locked --git https://github.com/ravshansbox/rust-sync
+rust-sync service install                # start now and at every login
 ```
+
+This puts `rust-sync` in `~/.cargo/bin`. To run the daemon in a terminal
+instead, use `rust-sync daemon`.
+
+**Upgrade:** run the same `cargo install` command, then `rust-sync service install`
+again to restart the daemon on the new version.
+
+**Uninstall:**
+
+```sh
+rust-sync service uninstall
+cargo uninstall rust-sync
+rm -r ~/.rust-sync                       # optional: node key, config and index
+```
+
+## Quick start
 
 On machine A:
 
 ```sh
 rust-sync add ~/notes                    # a folder
 rust-sync add ~/.zshrc                   # or a single file
-rust-sync node add macmini.local         # shows B's ID and asks you to confirm
+rust-sync node add macmini               # shows B's ID and asks you to confirm
 ```
 
 On machine B:
 
 ```sh
-rust-sync node add macbook.local         # B must trust A too
+rust-sync node add macbook               # B must trust A too
 ```
+
+Use a hostname, Tailscale name or IP address. See
+[macOS Local Network privacy](#macos-local-network-privacy) for why Tailscale
+names are the safest choice on macOS.
 
 That's it. B now syncs `~/notes` and `~/.zshrc`. The list of synced paths is
 shared, so `rust-sync add` on any machine applies everywhere.
@@ -44,6 +64,8 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync remove <path>` | `rm` | Stop syncing it. Files stay on disk |
 | `rust-sync node add <host[:port]> [--id ID] [-y]` | | Trust a node |
 | `rust-sync node remove <ID>` | | Stop trusting a node |
+| `rust-sync service install` | | Start the daemon at login (and now) |
+| `rust-sync service uninstall` | | Stop it and stop starting it at login |
 | `rust-sync status` | `list` | Nodes, paths, connections, pending requests |
 | `rust-sync id` | | This node's ID |
 
@@ -79,6 +101,23 @@ The changes take effect when the daemon starts.
 - **State** is kept in `~/.rust-sync/` (`key`, `config.json`, `index.bin`). Set
   `RUST_SYNC_HOME` to use a different folder.
 
+## Start at login
+
+```sh
+rust-sync service install
+```
+
+This installs a per-user launchd agent
+(`~/Library/LaunchAgents/com.github.ravshansbox.rust-sync.plist`) that runs
+`rust-sync daemon` at login and restarts it if it crashes. The log is in
+`~/Library/Logs/rust-sync.log`. Run `service install` again after moving or
+upgrading the binary. If you build from source, copy the binary somewhere stable
+first, because the agent runs it from where it was when you installed. `rust-sync service uninstall` removes the agent and leaves your config
+and files alone.
+
+A launchd agent is not exempt from Local Network privacy (below). Use Tailscale
+names for nodes, or allow the prompt if macOS shows one.
+
 ## macOS Local Network privacy
 
 Since macOS 15, a process may need permission to connect to devices on your
@@ -104,4 +143,4 @@ Source: Apple, [TN3179: Understanding local network privacy](https://developer.a
 - **Not synced:** empty folders, symlinks, extended attributes. Temporary files
   (`*.rsync-tmp`) and `.DS_Store` are ignored.
 - **Every node connects to every other node.** This is fine for a handful of machines.
-- **No start-at-login yet.** Run the daemon yourself, or add a launchd agent.
+- **Logs have no timestamps**, and the log file isn't rotated.

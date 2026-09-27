@@ -4,6 +4,7 @@ mod daemon;
 mod index;
 mod net;
 mod paths;
+mod service;
 
 use anyhow::{Context, bail};
 use clap::{Args, Parser, Subcommand};
@@ -43,6 +44,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: NodeCmd,
     },
+    /// Start the daemon at login, or stop doing so.
+    Service {
+        #[command(subcommand)]
+        cmd: ServiceCmd,
+    },
     /// Show nodes, synced paths and connection state.
     #[command(visible_alias = "list")]
     Status,
@@ -57,6 +63,14 @@ enum NodeCmd {
         /// The node's ID, as shown by `rust-sync status`.
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+enum ServiceCmd {
+    /// Install a launchd agent that runs the daemon at login, and start it now.
+    Install,
+    /// Stop the daemon and remove the launchd agent.
+    Uninstall,
 }
 
 #[derive(Args)]
@@ -107,7 +121,14 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Node { cmd: NodeCmd::Remove { id } } => {
             send(Req::RemoveNode { id: net::parse_id(&id).context("not a valid node ID")? }).await
         }
-        Cmd::Status => send(Req::Status).await,
+        Cmd::Service { cmd: ServiceCmd::Install } => service::install().await,
+        Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall().await,
+        Cmd::Status => {
+            send(Req::Status).await?;
+            let login = if service::installed() { "yes" } else { "no (`rust-sync service install`)" };
+            println!("Starts at login: {login}");
+            Ok(())
+        }
     }
 }
 

@@ -99,12 +99,16 @@ enum NodeCmd {
 #[derive(Subcommand)]
 enum ServiceCmd {
     /// Install a launchd agent that runs the daemon at login, and start it now.
-    Install,
+    Install {
+        /// Install a system daemon that runs as you from boot, without a login. Needs sudo.
+        #[arg(long)]
+        system: bool,
+    },
     /// Stop the daemon and remove the launchd agent.
     Uninstall,
     /// Start the daemon now.
     Start,
-    /// Stop the daemon now. It starts again at the next login.
+    /// Stop the daemon now. It starts again at the next login or boot.
     Stop,
     /// Stop and start the daemon, for example after an upgrade.
     Restart,
@@ -164,15 +168,17 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Node { cmd: NodeCmd::Remove { id } } => {
             send(Req::RemoveNode { id: net::parse_id(&id).context("not a valid node ID")? }).await
         }
-        Cmd::Service { cmd: ServiceCmd::Install } => service::install().await,
+        Cmd::Service { cmd: ServiceCmd::Install { system } } => service::install(system).await,
         Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall().await,
         Cmd::Service { cmd: ServiceCmd::Start } => service::start().await,
         Cmd::Service { cmd: ServiceCmd::Stop } => service::stop().await,
         Cmd::Service { cmd: ServiceCmd::Restart } => service::restart().await,
         Cmd::Status => {
             send(Req::Status).await?;
-            let login = if service::installed() { "yes" } else { "no (`rust-sync service install`)" };
-            outln!("Starts at login: {login}");
+            match service::starts_at() {
+                Some(when) => outln!("Starts at {when}: yes"),
+                None => outln!("Starts at login: no (`rust-sync service install`)"),
+            }
             Ok(())
         }
     }

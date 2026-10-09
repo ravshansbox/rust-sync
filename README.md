@@ -67,10 +67,10 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync node add <host[:port]> [--id ID] [-y]` | | Trust a node |
 | `rust-sync node list` | `node ls` | Trusted nodes, their addresses and connection state |
 | `rust-sync node remove <ID>` | `node rm` | Stop trusting a node |
-| `rust-sync service install` | | Start the daemon at login (and now) |
-| `rust-sync service uninstall` | | Stop it and stop starting it at login |
+| `rust-sync service install [--system]` | | Start the daemon at login, or at boot with `--system` (and now) |
+| `rust-sync service uninstall` | | Stop it and stop starting it automatically |
 | `rust-sync service start` | | Start the daemon now |
-| `rust-sync service stop` | | Stop the daemon now; it starts again at the next login |
+| `rust-sync service stop` | | Stop the daemon now; it starts again at the next login or boot |
 | `rust-sync service restart` | | Stop and start it, for example after an upgrade |
 | `rust-sync status` | | Nodes, paths, connections, pending requests |
 | `rust-sync id` | | This node's ID |
@@ -119,7 +119,7 @@ This installs a per-user launchd agent
 `rust-sync daemon` at login and restarts it if it crashes.
 
 - `rust-sync service stop` pauses syncing: the daemon stops and stays stopped
-  until `rust-sync service start` or the next login.
+  until `rust-sync service start` or the next login (or boot, with `--system`).
 - `rust-sync service restart` runs the current binary, for example after an
   upgrade.
 - Run `service install` again after **moving** the binary, because the agent
@@ -136,6 +136,23 @@ terminal, the log goes to the terminal instead, or to a file with
 
 A launchd agent is not exempt from Local Network privacy (below). Use Tailscale
 names for nodes, or allow the prompt if macOS shows one.
+
+### Start at boot, without a login
+
+An agent only runs once you log in on the Mac's screen. Logging in over SSH does
+not start it. On a machine that restarts with nobody logging in, such as a
+headless Mac mini, install a launchd daemon instead:
+
+```sh
+rust-sync service install --system
+```
+
+This asks for your password (through `sudo`) and installs
+`/Library/LaunchDaemons/com.github.ravshansbox.rust-sync.plist`. The daemon
+still runs as you, with your home folder and state, and starts at boot. It is
+exempt from Local Network privacy. Installing one kind replaces the other.
+`service start`, `stop`, `restart` and `uninstall` work with either, and ask for
+your password when the daemon kind is installed.
 
 ## macOS Local Network privacy
 

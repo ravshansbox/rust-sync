@@ -14,7 +14,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       exists: ${{ steps.version.outputs.exists }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: cargo clippy --all-targets -- -D warnings
       - id: version
         env:
@@ -36,11 +36,11 @@ jobs:
       matrix:
         target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --release --locked --target ${{ matrix.target }}
       - run: tar -czf rust-sync-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release rust-sync
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rust-sync-${{ matrix.target }}
           path: rust-sync-${{ matrix.target }}.tar.gz
@@ -49,7 +49,7 @@ jobs:
     needs: [check, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - env:

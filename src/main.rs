@@ -10,6 +10,9 @@ macro_rules! outln {
     ($($arg:tt)*) => { out!("{}\n", format_args!($($arg)*)) };
 }
 
+#[cfg(not(target_os = "macos"))]
+compile_error!("rust-sync only supports macOS");
+
 mod config;
 mod ctl;
 mod daemon;

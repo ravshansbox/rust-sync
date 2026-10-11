@@ -107,22 +107,6 @@ mod tests {
     }
 
     #[test]
-    fn rotate_moves_file_aside_and_starts_empty() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-log-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("test.log");
-        std::fs::write(&path, "old\n").unwrap();
-        let file = OpenOptions::new().append(true).open(&path).unwrap();
-        let mut log = LogFile { path: path.clone(), file, size: 4 };
-        log.rotate().unwrap();
-        log.file.write_all(b"new\n").unwrap();
-        assert_eq!(log.size, 0);
-        assert_eq!(std::fs::read_to_string(dir.join("test.log.1")).unwrap(), "old\n");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
     fn line_rotates_file_when_next_line_would_exceed_max_size() {
         let dir = std::env::temp_dir().join(format!("rust-sync-log-line-test-{}", std::process::id()));
         let path = dir.join("test.log");

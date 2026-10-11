@@ -1,6 +1,7 @@
 //! Commands from the CLI to a running daemon, over a Unix socket.
 //! One JSON line in, one JSON line out.
 
+use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
@@ -64,9 +65,57 @@ async fn call_at(sock: &Path, req: &Req) -> anyhow::Result<Option<Resp>> {
     Ok(Some(serde_json::from_str(&reply)?))
 }
 
+/// Apply a change request to the config and return the reply text, or an error text.
+/// Requests that only read, `Status` and `ListNodes`, must be handled by the caller.
+pub fn apply(cfg: &mut Config, me: &str, req: &Req) -> Result<String, String> {
+    match req {
+        Req::AddPath { path, is_dir } => {
+            cfg.set_root(me, path, *is_dir, false);
+            Ok(format!("Now syncing {path}"))
+        }
+        Req::RemovePath { path } => {
+            let Some(r) = cfg.shared.roots.get(path).filter(|r| !r.removed) else {
+                return Err(format!("{path} is not synced"));
+            };
+            let is_dir = r.is_dir;
+            cfg.set_root(me, path, is_dir, true);
+            Ok(format!("Stopped syncing {path}. The files stay on disk."))
+        }
+        Req::AddNode { id, addr } => {
+            cfg.set_node(me, id, addr, false);
+            Ok(format!("Added node {}", crate::net::pretty_id(id)))
+        }
+        Req::RemoveNode { id } => {
+            let Some(addr) = cfg.trusted(id).map(|n| n.addr.clone()) else { return Err("No such node".into()) };
+            cfg.set_node(me, id, &addr, true);
+            Ok(format!("Removed node {}", crate::net::pretty_id(id)))
+        }
+        Req::ListNodes | Req::Status => unreachable!("read-only request"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apply_edits_config_and_rejects_unknown_paths_and_nodes() {
+        let mut c = Config::default();
+        let add = Req::AddPath { path: "~/a".into(), is_dir: true };
+        assert_eq!(apply(&mut c, "me", &add).unwrap(), "Now syncing ~/a");
+        let rm = Req::RemovePath { path: "~/a".into() };
+        assert_eq!(apply(&mut c, "me", &rm).unwrap(), "Stopped syncing ~/a. The files stay on disk.");
+        assert!(c.shared.roots["~/a"].removed && c.shared.roots["~/a"].is_dir);
+        assert_eq!(apply(&mut c, "me", &rm).unwrap_err(), "~/a is not synced");
+
+        let add = Req::AddNode { id: "abcdefgh12".into(), addr: "h:1".into() };
+        assert_eq!(apply(&mut c, "me", &add).unwrap(), "Added node ABCDEFGH-12");
+        let rm = Req::RemoveNode { id: "abcdefgh12".into() };
+        assert_eq!(apply(&mut c, "me", &rm).unwrap(), "Removed node ABCDEFGH-12");
+        assert!(c.trusted("abcdefgh12").is_none());
+        assert_eq!(c.shared.nodes["abcdefgh12"].addr, "h:1");
+        assert_eq!(apply(&mut c, "me", &rm).unwrap_err(), "No such node");
+    }
 
     #[test]
     fn socket_path_fits_unix_limit_and_is_stable() {

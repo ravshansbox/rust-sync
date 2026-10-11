@@ -425,38 +425,21 @@ impl Daemon {
 
     fn on_ctl(&mut self, req: Req) -> Resp {
         let before = self.active_roots();
-        let me = self.me.clone();
-        let text = match req {
+        match &req {
             Req::Status => return Resp { ok: true, text: self.status() },
             Req::ListNodes => {
                 let text = nodes_text(&self.cfg, |id| Some(self.peers.contains_key(id)), &self.pending);
                 return Resp { ok: true, text };
             }
-            Req::AddPath { path, is_dir } => {
-                self.cfg.set_root(&me, &path, is_dir, false);
-                format!("Now syncing {path}")
+            Req::AddNode { id, .. } => {
+                self.remove_pending(id);
+                self.backoff.remove(id);
             }
-            Req::RemovePath { path } => {
-                let Some(r) = self.cfg.shared.roots.get(&path).filter(|r| !r.removed) else {
-                    return Resp { ok: false, text: format!("{path} is not synced") };
-                };
-                let is_dir = r.is_dir;
-                self.cfg.set_root(&me, &path, is_dir, true);
-                format!("Stopped syncing {path}. The files stay on disk.")
-            }
-            Req::AddNode { id, addr } => {
-                self.cfg.set_node(&me, &id, &addr, false);
-                self.remove_pending(&id);
-                self.backoff.remove(&id);
-                format!("Added node {}", net::pretty_id(&id))
-            }
-            Req::RemoveNode { id } => {
-                let Some(addr) = self.cfg.trusted(&id).map(|n| n.addr.clone()) else {
-                    return Resp { ok: false, text: "No such node".into() };
-                };
-                self.cfg.set_node(&me, &id, &addr, true);
-                format!("Removed node {}", net::pretty_id(&id))
-            }
+            _ => {}
+        }
+        let text = match ctl::apply(&mut self.cfg, &self.me, &req) {
+            Ok(text) => text,
+            Err(text) => return Resp { ok: false, text },
         };
         self.config_changed(&before);
         Resp { ok: true, text }

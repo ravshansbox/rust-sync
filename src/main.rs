@@ -214,7 +214,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
     }
     let me = my_keys()?.id();
     let mut cfg = Config::load(&paths::config_file())?;
-    let text = match req {
+    match req {
         Req::Status => {
             out!("{}", daemon::status_text(&cfg, &me, |_| None, &BTreeMap::default()));
             return Ok(());
@@ -224,26 +224,9 @@ async fn send(req: Req) -> anyhow::Result<()> {
             outln!("\n(The daemon is not running, so connection state is unknown.)");
             return Ok(());
         }
-        Req::AddPath { path, is_dir } => {
-            cfg.set_root(&me, &path, is_dir, false);
-            format!("Now syncing {path}")
-        }
-        Req::RemovePath { path } => {
-            let Some(r) = cfg.shared.roots.get(&path).filter(|r| !r.removed) else { bail!("{path} is not synced") };
-            let is_dir = r.is_dir;
-            cfg.set_root(&me, &path, is_dir, true);
-            format!("Stopped syncing {path}. The files stay on disk.")
-        }
-        Req::AddNode { id, addr } => {
-            cfg.set_node(&me, &id, &addr, false);
-            format!("Added node {}", net::pretty_id(&id))
-        }
-        Req::RemoveNode { id } => {
-            let Some(addr) = cfg.trusted(&id).map(|n| n.addr.clone()) else { bail!("No such node") };
-            cfg.set_node(&me, &id, &addr, true);
-            format!("Removed node {}", net::pretty_id(&id))
-        }
-    };
+        _ => {}
+    }
+    let text = ctl::apply(&mut cfg, &me, &req).map_err(anyhow::Error::msg)?;
     cfg.save(&paths::config_file())?;
     outln!("{text}\n(The daemon is not running. This takes effect when it starts.)");
     Ok(())

@@ -244,4 +244,12 @@ mod tests {
         assert!(Config::load(&path).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn load_fails_when_the_file_cannot_be_read() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-config-unreadable-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(Config::load(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

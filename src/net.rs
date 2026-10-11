@@ -232,6 +232,20 @@ mod tests {
         assert_eq!(short_id(ID), 0x0123_4567_89ab_cdef);
     }
 
+    #[test]
+    fn load_or_create_keys_persists_private_key_and_rejects_damaged_file() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-keys-{}", std::process::id()));
+        let created = load_or_create_keys(&dir).unwrap();
+        let path = dir.join("key");
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        let loaded = load_or_create_keys(&dir).unwrap();
+        assert_eq!(loaded.id(), created.id());
+        assert_eq!(loaded.private, created.private);
+        std::fs::write(&path, [0u8; 10]).unwrap();
+        assert!(load_or_create_keys(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[tokio::test]
     async fn handshake_exchanges_ids_and_messages() {
         let (a, b) = (new_keys(), new_keys());

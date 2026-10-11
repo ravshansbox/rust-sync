@@ -94,6 +94,18 @@ mod tests {
     }
 
     #[test]
+    fn write_atomic_replaces_contents_and_leaves_no_temp_file() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-write-atomic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.json");
+        std::fs::write(&path, "old").unwrap();
+        write_atomic(&path, b"new").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn ignored_skips_temp_files_and_ds_store() {
         assert!(ignored("x.rsync-tmp"));
         assert!(ignored(".DS_Store"));

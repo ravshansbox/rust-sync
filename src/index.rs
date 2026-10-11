@@ -172,6 +172,10 @@ fn remote_wins(l: &FileMeta, r: &FileMeta) -> bool {
 mod tests {
     use super::*;
 
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
+    }
+
     fn vv(pairs: &[(u64, u64)]) -> Vv {
         Vv(pairs.to_vec())
     }
@@ -264,7 +268,7 @@ mod tests {
 
     #[test]
     fn load_gives_empty_for_missing_or_damaged_file_and_save_round_trips() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-index-{}", std::process::id()));
+        let dir = test_dir("index");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("index.bin");
         assert!(load(&path).is_empty());
@@ -287,7 +291,7 @@ mod tests {
 
     #[test]
     fn stat_reports_regular_files_only() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-stat-{}", std::process::id()));
+        let dir = test_dir("stat");
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("f");
         std::fs::write(&file, b"hello").unwrap();
@@ -305,7 +309,7 @@ mod tests {
 
     #[test]
     fn hash_file_matches_blake3_across_buffer_boundary_and_fails_for_missing_file() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-hash-{}", std::process::id()));
+        let dir = test_dir("hash");
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("f");
         let data: Vec<u8> = (0..150_000u32).map(|i| (i % 251) as u8).collect();

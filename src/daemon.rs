@@ -179,7 +179,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         me,
         keys,
         cfg,
-        index: index::load(&dir.join("index.bin")),
+        index: index::load(&paths::index_file()),
         peers: HashMap::new(),
         dialling: HashSet::new(),
         backoff: HashMap::new(),
@@ -580,7 +580,7 @@ impl Daemon {
         if !self.index_dirty {
             return;
         }
-        match index::save(&self.index, &paths::state_dir().join("index.bin")) {
+        match index::save(&self.index, &paths::index_file()) {
             Ok(()) => self.index_dirty = false,
             Err(e) => log!("cannot save index: {e}"),
         }

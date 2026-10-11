@@ -25,6 +25,10 @@ pub fn config_file() -> PathBuf {
     state_dir().join("config.json")
 }
 
+pub fn index_file() -> PathBuf {
+    state_dir().join("index.bin")
+}
+
 /// Absolute local path -> portable string.
 pub fn to_portable(p: &Path) -> Option<String> {
     if let Ok(rel) = p.strip_prefix(home()) {

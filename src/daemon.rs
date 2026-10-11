@@ -806,7 +806,10 @@ pub fn paths_text(cfg: &Config) -> String {
     if roots.is_empty() {
         return "  (none) add one with `rust-sync path add <path>`\n".into();
     }
-    roots.into_iter().map(|(p, r)| format!("  {p}{}\n", if r.is_dir { "/" } else { "" })).collect()
+    roots.into_iter().fold(String::new(), |mut s, (p, r)| {
+        let _ = writeln!(s, "  {p}{}", if r.is_dir { "/" } else { "" });
+        s
+    })
 }
 
 /// Trusted nodes with their address and connection state, then untrusted nodes

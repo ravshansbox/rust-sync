@@ -157,6 +157,8 @@ mod tests {
         c.set_node("me", "p2", "h:2", true);
         let roots: Vec<_> = c.active_roots().map(|(p, _)| p.as_str()).collect();
         assert_eq!(roots, ["~/a"]);
+        let nodes: Vec<_> = c.trusted_nodes().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(nodes, ["p1"]);
         assert_eq!(c.trusted("p1").unwrap().addr, "h:1");
         assert!(c.trusted("p2").is_none());
         assert!(c.trusted("p3").is_none());

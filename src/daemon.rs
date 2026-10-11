@@ -1568,6 +1568,26 @@ mod tests {
     }
 
     #[test]
+    fn watches_follow_active_roots_with_files_watched_through_their_folder() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = std::env::temp_dir().join(format!("rust-sync-watch-{}", std::process::id()));
+        let (a, b, c) = (dir.join("a"), dir.join("b"), dir.join("c"));
+        d.cfg.set_root(&me, a.to_str().unwrap(), true, false);
+        d.cfg.set_root(&me, b.join("f.txt").to_str().unwrap(), false, false);
+        d.cfg.set_root(&me, c.to_str().unwrap(), true, true);
+        d.reconcile_watches();
+        assert!(a.is_dir() && b.is_dir() && !c.exists());
+        let want = HashMap::from([(a.clone(), RecursiveMode::Recursive), (b.clone(), RecursiveMode::NonRecursive)]);
+        assert_eq!(d.watched, want);
+        d.cfg.set_root(&me, a.to_str().unwrap(), true, true);
+        d.cfg.set_root(&me, b.to_str().unwrap(), true, false);
+        d.reconcile_watches();
+        assert_eq!(d.watched, HashMap::from([(b, RecursiveMode::Recursive)]));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn tree_check_records_nested_files_skips_ignored_names_and_marks_missing_files_deleted() {
         let mut d = daemon();
         let me = d.me.clone();

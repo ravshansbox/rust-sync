@@ -17,9 +17,7 @@ pub fn home() -> &'static Path {
 pub fn state_dir() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
-        std::env::var_os("RUST_SYNC_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home().join(".rust-sync"))
+        std::env::var_os("RUST_SYNC_HOME").map_or_else(|| home().join(".rust-sync"), PathBuf::from)
     })
 }
 

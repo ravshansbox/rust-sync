@@ -99,6 +99,11 @@ mod tests {
     }
 
     #[test]
+    fn to_local_rejects_another_users_home() {
+        assert_eq!(to_local("~other/x"), None);
+    }
+
+    #[test]
     fn to_local_rejects_state_folder() {
         assert_eq!(to_local(state_dir().to_str().unwrap()), None);
         assert_eq!(to_local(state_dir().join("x").to_str().unwrap()), None);

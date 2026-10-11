@@ -1256,6 +1256,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_does_not_come_up_when_the_listener_does_not_trust_the_dialler() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-trust-{}", std::process::id()));
+        let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (a_tx, a_rx) = mpsc::unbounded_channel();
+        let (b_tx, b_rx) = mpsc::unbounded_channel();
+        let answer = async |mut rx: mpsc::UnboundedReceiver<Event>, trust: bool| {
+            let Some(Event::Auth { id, addr, reply }) = rx.recv().await else { panic!() };
+            reply.send(trust).unwrap();
+            (id, addr, rx.recv().await.is_none())
+        };
+        let dialler = async {
+            let s = TcpStream::connect(addr).await.unwrap();
+            connection_inner(s, addr.ip(), Some(b.id()), a.clone(), a_tx, 4000).await
+        };
+        let listener = async {
+            let (s, peer) = l.accept().await.unwrap();
+            connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
+        };
+        let (a_res, b_res, a_seen, b_seen) = tokio::join!(dialler, listener, answer(a_rx, true), answer(b_rx, false));
+        a_res.unwrap();
+        b_res.unwrap();
+        assert_eq!(a_seen, (b.id(), None, true));
+        assert_eq!(b_seen, (a.id(), Some("127.0.0.1:4000".into()), true));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
         let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
         let _ = std::fs::remove_file(&sock);

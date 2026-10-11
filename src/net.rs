@@ -150,28 +150,28 @@ pub async fn handshake(
 }
 
 async fn handshake_inner(
-    mut s: TcpStream,
+    mut stream: TcpStream,
     keys: &Keys,
     initiator: bool,
 ) -> anyhow::Result<(Reader, Writer, String)> {
-    s.set_nodelay(true)?;
-    let b = Builder::new(PARAMS.parse()?).local_private_key(&keys.private)?;
-    let mut hs = if initiator { b.build_initiator()? } else { b.build_responder()? };
+    stream.set_nodelay(true)?;
+    let builder = Builder::new(PARAMS.parse()?).local_private_key(&keys.private)?;
+    let mut hs = if initiator { builder.build_initiator()? } else { builder.build_responder()? };
     let mut buf = vec![0u8; MAX_FRAME];
     let mut sink = vec![0u8; MAX_FRAME];
     // XX pattern: -> e, <- e ee s es, -> s se
     for step in 0..3 {
         if (step % 2 == 0) == initiator {
             let n = hs.write_message(&[], &mut buf)?;
-            write_frame(&mut s, &buf[..n]).await?;
+            write_frame(&mut stream, &buf[..n]).await?;
         } else {
-            let frame = read_frame(&mut s).await?;
+            let frame = read_frame(&mut stream).await?;
             hs.read_message(&frame, &mut sink)?;
         }
     }
     let remote = hex(hs.get_remote_static().context("peer sent no key")?);
     let t = Arc::new(Mutex::new(hs.into_transport_mode()?));
-    let (r, w) = s.into_split();
+    let (r, w) = stream.into_split();
     Ok((Reader { r, t: t.clone() }, Writer { w, t }, remote))
 }
 

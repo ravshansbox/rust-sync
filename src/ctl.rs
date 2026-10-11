@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
@@ -46,7 +46,11 @@ pub fn socket_path() -> anyhow::Result<PathBuf> {
 
 /// Send a request to the daemon. `Ok(None)` means no daemon is running.
 pub async fn call(req: &Req) -> anyhow::Result<Option<Resp>> {
-    let Ok(s) = UnixStream::connect(socket_path()?).await else { return Ok(None) };
+    call_at(&socket_path()?, req).await
+}
+
+async fn call_at(sock: &Path, req: &Req) -> anyhow::Result<Option<Resp>> {
+    let Ok(s) = UnixStream::connect(sock).await else { return Ok(None) };
     let (r, mut w) = s.into_split();
     let mut line = serde_json::to_string(req)?;
     line.push('\n');
@@ -76,5 +80,30 @@ mod tests {
             assert!(p.starts_with("/tmp"));
             assert_eq!(p.extension().unwrap(), "sock");
         }
+    }
+
+    #[tokio::test]
+    async fn call_at_returns_reply_or_none_when_daemon_is_absent_or_closes() {
+        let sock = std::env::temp_dir().join(format!("rust-sync-call-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&sock);
+        assert!(call_at(&sock, &Req::Status).await.unwrap().is_none());
+
+        let l = tokio::net::UnixListener::bind(&sock).unwrap();
+        let server = tokio::spawn(async move {
+            let (s, _) = l.accept().await.unwrap();
+            let (r, mut w) = s.into_split();
+            let mut line = String::new();
+            BufReader::new(r).read_line(&mut line).await.unwrap();
+            w.write_all(b"{\"ok\":false,\"text\":\"no\"}\n").await.unwrap();
+            let (s, _) = l.accept().await.unwrap();
+            drop(s);
+            line
+        });
+        let resp = call_at(&sock, &Req::RemoveNode { id: "abcd".into() }).await.unwrap().unwrap();
+        assert!(!resp.ok);
+        assert_eq!(resp.text, "no");
+        assert!(call_at(&sock, &Req::Status).await.unwrap().is_none());
+        assert_eq!(server.await.unwrap(), "{\"RemoveNode\":{\"id\":\"abcd\"}}\n");
+        std::fs::remove_file(&sock).unwrap();
     }
 }

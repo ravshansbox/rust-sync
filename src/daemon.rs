@@ -1426,6 +1426,27 @@ mod tests {
     }
 
     #[test]
+    fn same_content_from_remote_merges_history_and_keeps_local_size_and_mtime() {
+        let mut d = daemon();
+        let lp = Path::new("/nonexistent/f.txt");
+        for (remote_vv, want) in [(vec![(2, 1)], vec![(1, 1), (2, 1)]), (vec![(1, 2)], vec![(1, 2)])] {
+            let mut local = meta(5, 1);
+            local.vv = Vv(vec![(1, 1)]);
+            d.index.insert("~/s/f.txt".into(), local);
+            d.outbox.clear();
+            let mut r = meta(9, 2);
+            r.size = 7;
+            r.vv = Vv(remote_vv);
+            d.apply("aa", "~/s/f.txt", lp, r, None);
+            let got = &d.index["~/s/f.txt"];
+            assert_eq!(got.vv, Vv(want));
+            assert_eq!((got.size, got.mtime), (1, 5));
+            assert_eq!(d.outbox.len(), 1);
+            assert!(d.downloads.is_empty());
+        }
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

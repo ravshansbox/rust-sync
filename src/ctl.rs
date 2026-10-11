@@ -118,6 +118,14 @@ mod tests {
     }
 
     #[test]
+    fn remove_path_keeps_file_root_as_file() {
+        let mut c = Config::default();
+        apply(&mut c, "me", &Req::AddPath { path: "~/f".into(), is_dir: false }).unwrap();
+        apply(&mut c, "me", &Req::RemovePath { path: "~/f".into() }).unwrap();
+        assert!(c.shared.roots["~/f"].removed && !c.shared.roots["~/f"].is_dir);
+    }
+
+    #[test]
     fn socket_path_fits_unix_limit_and_is_stable() {
         let p = socket_path().unwrap();
         assert!(p.as_os_str().len() < 104);

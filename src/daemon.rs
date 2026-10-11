@@ -952,7 +952,7 @@ async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::
 /// (Happy Eyeballs, RFC 8305). A failed attempt starts the next one at once.
 async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
     let (v6, v4): (Vec<SocketAddr>, Vec<SocketAddr>) =
-        tokio::net::lookup_host(addr).await?.partition(|a| a.is_ipv6());
+        tokio::net::lookup_host(addr).await?.partition(SocketAddr::is_ipv6);
     let mut order = Vec::with_capacity(v6.len() + v4.len());
     let (mut v6, mut v4) = (v6.into_iter(), v4.into_iter());
     loop {

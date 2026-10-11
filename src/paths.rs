@@ -66,3 +66,53 @@ pub fn is_under(path: &str, root: &str) -> bool {
 pub fn ignored(name: &str) -> bool {
     name.ends_with(".rsync-tmp") || name == ".DS_Store"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_under_matches_root_and_children_only() {
+        assert!(is_under("/a/b", "/a/b"));
+        assert!(is_under("/a/b/c", "/a/b"));
+        assert!(is_under("/a/b/c", "/a/b/"));
+        assert!(!is_under("/a/bc", "/a/b"));
+        assert!(!is_under("/a", "/a/b"));
+    }
+
+    #[test]
+    fn ignored_skips_temp_files_and_ds_store() {
+        assert!(ignored("x.rsync-tmp"));
+        assert!(ignored(".DS_Store"));
+        assert!(!ignored("notes.txt"));
+        assert!(!ignored("sub/.DS_Store.bak"));
+    }
+
+    #[test]
+    fn to_local_rejects_unsafe_paths() {
+        assert_eq!(to_local("~/a/../b"), None);
+        assert_eq!(to_local("~/./a"), None);
+        assert_eq!(to_local("/a\0b"), None);
+        assert_eq!(to_local("relative/path"), None);
+    }
+
+    #[test]
+    fn to_local_rejects_state_folder() {
+        assert_eq!(to_local(state_dir().to_str().unwrap()), None);
+        assert_eq!(to_local(state_dir().join("x").to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn home_paths_round_trip_through_tilde() {
+        assert_eq!(to_portable(home()).as_deref(), Some("~"));
+        assert_eq!(to_portable(&home().join("a/b")).as_deref(), Some("~/a/b"));
+        assert_eq!(to_local("~"), Some(home().to_path_buf()));
+        assert_eq!(to_local("~/a/b"), Some(home().join("a/b")));
+    }
+
+    #[test]
+    fn absolute_paths_outside_home_stay_absolute() {
+        assert_eq!(to_portable(Path::new("/nonexistent-root/x")).as_deref(), Some("/nonexistent-root/x"));
+        assert_eq!(to_local("/nonexistent-root/x"), Some(PathBuf::from("/nonexistent-root/x")));
+    }
+}

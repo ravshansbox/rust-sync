@@ -258,11 +258,13 @@ mod tests {
     }
 
     #[test]
-    fn under_matches_prefix_and_its_children_only() {
+    fn under_matches_prefix_and_its_children_only_with_or_without_trailing_slash() {
         let m = meta(Some(1), 0, 1, Vv::default());
         let index: Index = ["~/a", "~/a/b", "~/a/c/d", "~/ab", "~/b"].map(|k| (k.to_string(), m.clone())).into();
         let got: Vec<_> = under(&index, "~/a").cloned().collect();
         assert_eq!(got, ["~/a", "~/a/b", "~/a/c/d"]);
+        let got: Vec<_> = under(&index, "~/a/").cloned().collect();
+        assert_eq!(got, ["~/a/b", "~/a/c/d"]);
     }
 
     #[test]

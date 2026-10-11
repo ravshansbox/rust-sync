@@ -1362,6 +1362,26 @@ mod tests {
     }
 
     #[test]
+    fn queue_waits_for_a_free_slot_and_drops_files_from_offline_nodes() {
+        let mut d = daemon();
+        let tmp = std::env::temp_dir().join(format!("rust-sync-pump-{}", std::process::id()));
+        for n in 0..MAX_DOWNLOADS {
+            let file = File::create(&tmp).unwrap();
+            let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            d.downloads.insert(format!("~/s/{n}"), dl);
+        }
+        d.queued.insert("~/s/f".into(), ("aa".into(), meta(0, 0)));
+        d.queued.insert("~/s/g".into(), ("bb".into(), meta(0, 0)));
+        d.pump_queue();
+        assert_eq!(d.queued.len(), 2);
+        d.cancel_download("~/s/0");
+        d.pump_queue();
+        assert!(d.queued.is_empty());
+        assert_eq!(d.downloads.len(), MAX_DOWNLOADS - 1);
+        let _ = std::fs::remove_file(tmp);
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

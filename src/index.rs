@@ -266,6 +266,21 @@ mod tests {
     }
 
     #[test]
+    fn load_gives_empty_for_missing_or_damaged_file_and_save_round_trips() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-index-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("index.bin");
+        assert!(load(&path).is_empty());
+        let index: Index = [("~/a".to_string(), meta(Some(7), 42, 3, vv(&[(3, 2)])))].into();
+        save(&index, &path).unwrap();
+        assert_eq!(load(&path), index);
+        assert!(!path.with_extension("tmp").exists());
+        std::fs::write(&path, [0xff; 4]).unwrap();
+        assert!(load(&path).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn nanos_is_signed_offset_from_unix_epoch() {
         let d = std::time::Duration::new(3, 5);
         assert_eq!(nanos(UNIX_EPOCH), 0);

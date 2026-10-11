@@ -1221,6 +1221,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_sends_file_in_chunks_then_eof_or_unavailable_when_missing() {
+        let lp = std::env::temp_dir().join(format!("rust-sync-upload-{}", std::process::id()));
+        let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();
+        std::fs::write(&lp, &data).unwrap();
+        let (tx, mut rx) = mpsc::channel(8);
+        upload(lp.clone(), "~/f".into(), tx.clone(), Arc::new(Semaphore::new(1))).await;
+        let mut got = Vec::new();
+        for (want_offset, want_len, want_eof) in [(0, net::CHUNK, false), (net::CHUNK, 5, false), (net::CHUNK + 5, 0, true)] {
+            let Some(Msg::Data { path, offset, bytes, eof }) = rx.recv().await else { panic!() };
+            assert_eq!((path.as_str(), offset, bytes.len(), eof), ("~/f", want_offset as u64, want_len, want_eof));
+            got.extend(bytes);
+        }
+        assert_eq!(got, data);
+        std::fs::remove_file(&lp).unwrap();
+        upload(lp, "~/f".into(), tx, Arc::new(Semaphore::new(1))).await;
+        assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path }) if path == "~/f"));
+        assert!(rx.recv().await.is_none());
+    }
+
+    #[tokio::test]
     async fn connect_any_falls_back_to_an_address_that_listens_and_fails_when_none_does() {
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = l.local_addr().unwrap().port();

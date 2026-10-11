@@ -126,6 +126,22 @@ mod tests {
     }
 
     #[test]
+    fn line_keeps_file_when_next_line_reaches_max_size_exactly() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let dir = std::env::temp_dir().join(format!("rust-sync-log-limit-test-{}", std::process::id()));
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        let line_len = timestamp().len() + " hello\n".len();
+        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
+        to_file(path.clone()).unwrap();
+        line(format_args!("hello"));
+        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        assert!(!dir.join("test.log.1").exists());
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), MAX_SIZE);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn to_file_creates_missing_folder_and_appends_across_reopens() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("rust-sync-log-to-file-test-{}", std::process::id()));

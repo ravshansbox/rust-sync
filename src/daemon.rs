@@ -1316,6 +1316,23 @@ mod tests {
     }
 
     #[test]
+    fn rejected_request_replies_with_the_error_and_changes_nothing() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        while rx.try_recv().is_ok() {}
+        let clock = d.cfg.clock;
+        let resp = d.on_ctl(Req::RemovePath { path: "~/x".into() });
+        assert_eq!((resp.ok, resp.text.as_str()), (false, "~/x is not synced"));
+        let resp = d.on_ctl(Req::RemoveNode { id: "bb".into() });
+        assert_eq!((resp.ok, resp.text.as_str()), (false, "No such node"));
+        assert_eq!(d.cfg.clock, clock);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
     fn unavailable_cancels_a_download_only_when_sent_by_its_source() {
         let mut d = daemon();
         let me = d.me.clone();

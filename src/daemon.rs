@@ -1092,3 +1092,62 @@ async fn upload(lp: PathBuf, path: String, tx: mpsc::Sender<Msg>, slots: Arc<Sem
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(mtime: i64, by: u64) -> FileMeta {
+        FileMeta { hash: Some([1; 32]), size: 1, mtime, mode: 0o644, vv: Vv::default(), by }
+    }
+
+    fn entry(path: String, nodes: u64) -> Entry {
+        let mut m = meta(0, 0);
+        m.vv = Vv((0..nodes).map(|n| (u64::MAX - n, u64::MAX)).collect());
+        Entry { path, meta: m }
+    }
+
+    #[test]
+    fn conflict_name_keeps_extension_and_tags_loser() {
+        let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
+        assert_eq!(
+            conflict_name(Path::new("/d/notes.md"), &loser),
+            PathBuf::from("/d/notes.sync-conflict-1700000000-deadbeef.md")
+        );
+        assert_eq!(
+            conflict_name(Path::new("/d/Makefile"), &loser),
+            PathBuf::from("/d/Makefile.sync-conflict-1700000000-deadbeef")
+        );
+        assert_eq!(
+            conflict_name(Path::new("/d/a.tar.gz"), &meta(0, 1 << 32)),
+            PathBuf::from("/d/a.tar.sync-conflict-0-00000001.gz")
+        );
+    }
+
+    #[test]
+    fn batches_keeps_order_and_skips_empty() {
+        assert!(batches(Vec::new()).is_empty());
+        let entries: Vec<_> = (0..1000).map(|i| entry(format!("~/{i}"), 1)).collect();
+        let out = batches(entries);
+        assert!(out.len() > 1);
+        assert!(out.iter().all(|b| !b.is_empty()));
+        let paths: Vec<_> = out.iter().flatten().map(|e| e.path.clone()).collect();
+        assert_eq!(paths, (0..1000).map(|i| format!("~/{i}")).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn batches_fit_in_one_message() {
+        let entries: Vec<_> = (0..500).map(|i| entry(format!("~/{}/{i}", "x".repeat(200)), 8)).collect();
+        for b in batches(entries) {
+            let len = postcard::to_stdvec(&Msg::Index(b)).unwrap().len();
+            assert!(len <= net::MAX_MSG, "{len}");
+        }
+    }
+
+    #[test]
+    fn batches_gives_an_oversized_entry_its_own_batch() {
+        let big = entry(format!("~/{}", "b".repeat(50_000)), 1);
+        let out = batches(vec![entry("~/a".into(), 1), big, entry("~/c".into(), 1)]);
+        assert_eq!(out.iter().map(Vec::len).collect::<Vec<_>>(), [1, 1, 1]);
+    }
+}

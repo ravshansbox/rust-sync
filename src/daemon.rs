@@ -1531,6 +1531,26 @@ mod tests {
     }
 
     #[test]
+    fn file_events_are_checked_only_inside_roots_and_skip_ignored_names() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = std::env::temp_dir().join(format!("rust-sync-fs-{}", std::process::id()));
+        let root = dir.join("in");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        d.cfg.set_root(&me, root.to_str().unwrap(), true, false);
+        for lp in [dir.join("out/f.txt"), root.join(".DS_Store"), root.join("f.txt")] {
+            std::fs::write(&lp, "x").unwrap();
+            d.on_fs(&lp);
+        }
+        let p = root.join("f.txt").to_str().unwrap().to_string();
+        assert_eq!(d.index.keys().collect::<Vec<_>>(), [&p]);
+        assert_eq!(d.index[&p].vv, Vv(vec![(d.me_short, 1)]));
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn tree_check_records_nested_files_skips_ignored_names_and_marks_missing_files_deleted() {
         let mut d = daemon();
         let me = d.me.clone();

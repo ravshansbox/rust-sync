@@ -404,9 +404,8 @@ impl Daemon {
         if let Err(e) = self.cfg.save(&paths::config_file()) {
             log!("cannot save config: {e}");
         }
-        let gone: Vec<String> = self.peers.keys().filter(|id| self.cfg.trusted(id).is_none()).cloned().collect();
+        let gone: Vec<String> = self.peers.extract_if(|id, _| self.cfg.trusted(id).is_none()).map(|(id, _)| id).collect();
         for id in gone {
-            self.peers.remove(&id);
             self.drop_downloads_from(&id);
         }
         self.reconcile_watches();

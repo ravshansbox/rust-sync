@@ -1232,6 +1232,27 @@ mod tests {
     }
 
     #[test]
+    fn data_is_written_only_from_the_source_and_a_gap_cancels_the_download() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        for (id, conn) in [("aa", 1), ("bb", 2)] {
+            d.cfg.set_node(&me, id, "h:1", false);
+            let ctl = mpsc::unbounded_channel().0;
+            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+        }
+        let tmp = std::env::temp_dir().join(format!("rust-sync-data-{}", std::process::id()));
+        let file = File::create(&tmp).unwrap();
+        let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        d.downloads.insert("~/s/f".into(), dl);
+        let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), offset, bytes: bytes.to_vec(), eof: false };
+        d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: data(0, b"xx") });
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(0, b"abc") });
+        assert_eq!(std::fs::read(&tmp).unwrap(), b"abc");
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(4, b"d") });
+        assert!(!tmp.exists());
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

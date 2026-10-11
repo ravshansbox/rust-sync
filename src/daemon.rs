@@ -268,7 +268,7 @@ impl Daemon {
                 }
             }
             Event::Ctl(req, reply) => {
-                let resp = self.on_ctl(req);
+                let resp = self.on_ctl(&req);
                 let _ = reply.send(resp);
             }
             Event::Shutdown => {}
@@ -423,9 +423,9 @@ impl Daemon {
         self.dial_all();
     }
 
-    fn on_ctl(&mut self, req: Req) -> Resp {
+    fn on_ctl(&mut self, req: &Req) -> Resp {
         let before = self.active_roots();
-        match &req {
+        match req {
             Req::Status => return Resp { ok: true, text: self.status() },
             Req::ListNodes => {
                 let text = nodes_text(&self.cfg, |id| Some(self.peers.contains_key(id)), &self.pending);
@@ -437,7 +437,7 @@ impl Daemon {
             }
             _ => {}
         }
-        let text = match ctl::apply(&mut self.cfg, &self.me, &req) {
+        let text = match ctl::apply(&mut self.cfg, &self.me, req) {
             Ok(text) => text,
             Err(text) => return Resp { ok: false, text },
         };
@@ -1129,7 +1129,7 @@ mod tests {
             d.handle(Event::Auth { id: format!("{i:02}"), addr: Some(format!("h:{i}")), reply });
             assert!(!rx.try_recv().unwrap());
         }
-        let text = d.on_ctl(Req::ListNodes).text;
+        let text = d.on_ctl(&Req::ListNodes).text;
         assert!(!text.contains("  00  h:0\n"), "{text}");
         assert!(text.contains("  01  h:1\n"), "{text}");
         assert!(text.contains(&format!("  {MAX_PENDING}  h:{MAX_PENDING}\n")), "{text}");
@@ -1147,7 +1147,7 @@ mod tests {
         }
         auth("00".into(), "h:new".into());
         auth("99".into(), "h:99".into());
-        let text = d.on_ctl(Req::ListNodes).text;
+        let text = d.on_ctl(&Req::ListNodes).text;
         assert!(text.contains("  00  h:new\n"), "{text}");
         assert!(!text.contains("  01  h:1\n"), "{text}");
         assert!(text.contains("  99  h:99\n"), "{text}");
@@ -1162,7 +1162,7 @@ mod tests {
         let (reply, mut rx) = oneshot::channel();
         d.handle(Event::Auth { id: "aa".into(), addr: Some("h:2".into()), reply });
         assert!(rx.try_recv().unwrap());
-        let text = d.on_ctl(Req::ListNodes).text;
+        let text = d.on_ctl(&Req::ListNodes).text;
         assert!(!text.contains("Waiting to be trusted"), "{text}");
     }
 
@@ -1210,9 +1210,9 @@ mod tests {
         let (ctl, _rx) = mpsc::unbounded_channel();
         d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
         d.handle(Event::Down { id: "aa".into(), conn: 2 });
-        assert!(d.on_ctl(Req::ListNodes).text.contains("  connected"));
+        assert!(d.on_ctl(&Req::ListNodes).text.contains("  connected"));
         d.handle(Event::Down { id: "aa".into(), conn: 1 });
-        assert!(d.on_ctl(Req::ListNodes).text.contains("  offline"));
+        assert!(d.on_ctl(&Req::ListNodes).text.contains("  offline"));
     }
 
     #[tokio::test]
@@ -1311,7 +1311,7 @@ mod tests {
         d.index.insert("~/s/gone".into(), FileMeta { hash: None, ..meta(0, 0) });
         d.index.insert("~/x".into(), meta(0, 0));
         d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0)));
-        let text = d.on_ctl(Req::Status).text;
+        let text = d.on_ctl(&Req::Status).text;
         assert!(text.contains("\nFiles tracked: 2\nTransfers: 0 active, 1 queued\n"), "{text}");
     }
 
@@ -1324,9 +1324,9 @@ mod tests {
         d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
         while rx.try_recv().is_ok() {}
         let clock = d.cfg.clock;
-        let resp = d.on_ctl(Req::RemovePath { path: "~/x".into() });
+        let resp = d.on_ctl(&Req::RemovePath { path: "~/x".into() });
         assert_eq!((resp.ok, resp.text.as_str()), (false, "~/x is not synced"));
-        let resp = d.on_ctl(Req::RemoveNode { id: "bb".into() });
+        let resp = d.on_ctl(&Req::RemoveNode { id: "bb".into() });
         assert_eq!((resp.ok, resp.text.as_str()), (false, "No such node"));
         assert_eq!(d.cfg.clock, clock);
         assert!(rx.try_recv().is_err());

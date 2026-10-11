@@ -27,6 +27,7 @@ use clap::{Args, Parser, Subcommand};
 use config::Config;
 use ctl::Req;
 use net::Msg;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -219,11 +220,11 @@ async fn send(req: Req) -> anyhow::Result<()> {
     let mut cfg = Config::load(&config_path())?;
     let text = match req {
         Req::Status => {
-            out!("{}", daemon::status_text(&cfg, &me, |_| None, &Default::default()));
+            out!("{}", daemon::status_text(&cfg, &me, |_| None, &BTreeMap::default()));
             return Ok(());
         }
         Req::ListNodes => {
-            out!("{}", daemon::nodes_text(&cfg, |_| None, &Default::default()));
+            out!("{}", daemon::nodes_text(&cfg, |_| None, &BTreeMap::default()));
             outln!("\n(The daemon is not running, so connection state is unknown.)");
             return Ok(());
         }

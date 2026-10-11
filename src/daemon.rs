@@ -1234,6 +1234,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dial_reports_done_when_the_peer_cannot_be_reached() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-dial-{}", std::process::id()));
+        let keys = Arc::new(net::load_or_create_keys(&dir).unwrap());
+        let addr = TcpListener::bind("127.0.0.1:0").await.unwrap().local_addr().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        dial(addr.to_string(), "ab".repeat(32), true, keys, tx, 0).await;
+        let Some(Event::DialDone { id }) = rx.recv().await else { panic!("expected DialDone") };
+        assert_eq!(id, "ab".repeat(32));
+        assert!(rx.recv().await.is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn connection_rejects_a_peer_whose_id_is_not_the_one_dialled() {
         let dir = std::env::temp_dir().join(format!("rust-sync-conn-{}", std::process::id()));
         let keys = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());

@@ -170,3 +170,78 @@ async fn handshake_inner(
     let (r, w) = s.into_split();
     Ok((Reader { r, t: t.clone() }, Writer { w, t }, remote))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::net::TcpListener;
+
+    const ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn new_keys() -> Keys {
+        let kp = Builder::new(PARAMS.parse().unwrap()).generate_keypair().unwrap();
+        Keys { private: kp.private, public: kp.public }
+    }
+
+    async fn connect(a: &Keys, b: &Keys) -> ((Reader, Writer, String), (Reader, Writer, String)) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = async {
+            let (s, _) = listener.accept().await.unwrap();
+            handshake(s, b, false).await.unwrap()
+        };
+        let client = async { handshake(TcpStream::connect(addr).await.unwrap(), a, true).await.unwrap() };
+        tokio::join!(server, client)
+    }
+
+    #[test]
+    fn hex_is_lowercase_two_digits_per_byte() {
+        assert_eq!(hex(&[0x00, 0x0a, 0xff]), "000aff");
+        assert_eq!(hex(&[]), "");
+    }
+
+    #[test]
+    fn pretty_id_groups_in_eights_upper_case() {
+        assert_eq!(
+            pretty_id(ID),
+            "01234567-89ABCDEF-01234567-89ABCDEF-01234567-89ABCDEF-01234567-89ABCDEF"
+        );
+    }
+
+    #[test]
+    fn parse_id_accepts_pretty_and_plain_forms() {
+        assert_eq!(parse_id(ID).as_deref(), Some(ID));
+        assert_eq!(parse_id(&pretty_id(ID)).as_deref(), Some(ID));
+        assert_eq!(parse_id(&pretty_id(ID).replace('-', " ")).as_deref(), Some(ID));
+    }
+
+    #[test]
+    fn parse_id_rejects_wrong_length_or_characters() {
+        assert_eq!(parse_id(&ID[..62]), None);
+        assert_eq!(parse_id(&format!("{ID}00")), None);
+        assert_eq!(parse_id(&format!("{}g", &ID[..63])), None);
+        assert_eq!(parse_id(&format!("{ID}x")), None);
+    }
+
+    #[test]
+    fn short_id_reads_first_eight_bytes() {
+        assert_eq!(short_id(ID), 0x0123456789abcdef);
+    }
+
+    #[tokio::test]
+    async fn handshake_exchanges_ids_and_messages() {
+        let (a, b) = (new_keys(), new_keys());
+        let ((mut br, _bw, b_sees), (_ar, mut aw, a_sees)) = connect(&a, &b).await;
+        assert_eq!(b_sees, a.id());
+        assert_eq!(a_sees, b.id());
+        aw.send(&Msg::Unavailable { path: "~/x".into() }).await.unwrap();
+        assert!(matches!(br.recv().await.unwrap(), Msg::Unavailable { path } if path == "~/x"));
+    }
+
+    #[tokio::test]
+    async fn send_rejects_oversized_message() {
+        let (_, (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
+        let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };
+        assert!(aw.send(&msg).await.is_err());
+    }
+}

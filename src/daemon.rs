@@ -1166,6 +1166,19 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn only_the_current_connection_going_down_marks_the_node_offline() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let (ctl, _rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        d.handle(Event::Down { id: "aa".into(), conn: 2 });
+        assert!(d.on_ctl(Req::ListNodes).text.contains("  connected"));
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        assert!(d.on_ctl(Req::ListNodes).text.contains("  offline"));
+    }
+
     #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);

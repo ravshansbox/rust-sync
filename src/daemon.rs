@@ -1470,6 +1470,43 @@ mod tests {
     }
 
     #[test]
+    fn local_file_changes_are_recorded_but_a_touch_is_not_a_new_version() {
+        let mut d = daemon();
+        let me = d.me_short;
+        let dir = std::env::temp_dir().join(format!("rust-sync-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        let p = "~/s/f.txt";
+        d.check_file(p, &lp);
+        assert!(d.index.is_empty());
+        std::fs::write(&lp, "one").unwrap();
+        d.check_file(p, &lp);
+        assert_eq!(d.index[p].vv, Vv(vec![(me, 1)]));
+        assert_eq!(d.index[p].hash, Some(index::hash_file(&lp).unwrap()));
+        assert_eq!(d.outbox.len(), 1);
+        d.check_file(p, &lp);
+        assert_eq!(d.outbox.len(), 1);
+        let f = std::fs::File::options().write(true).open(&lp).unwrap();
+        f.set_modified(std::time::SystemTime::UNIX_EPOCH).unwrap();
+        d.check_file(p, &lp);
+        assert_eq!((d.index[p].mtime, d.index[p].vv.clone()), (0, Vv(vec![(me, 1)])));
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::write(&lp, "two").unwrap();
+        d.check_file(p, &lp);
+        assert_eq!(d.index[p].vv, Vv(vec![(me, 2)]));
+        assert_eq!(d.index[p].size, 3);
+        assert_eq!(d.outbox.len(), 2);
+        std::fs::remove_file(&lp).unwrap();
+        d.check_file(p, &lp);
+        assert!(d.index[p].deleted());
+        assert_eq!(d.index[p].vv, Vv(vec![(me, 3)]));
+        assert_eq!(d.outbox.len(), 3);
+        d.check_file(p, &lp);
+        assert_eq!(d.outbox.len(), 3);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

@@ -82,7 +82,7 @@ pub fn pretty_id(id: &str) -> String {
 
 /// Accept an ID typed with or without dashes, in any case.
 pub fn parse_id(s: &str) -> Option<String> {
-    let id = s.chars().filter(char::is_ascii_hexdigit).collect::<String>().to_lowercase();
+    let id: String = s.chars().filter(char::is_ascii_hexdigit).map(|c| c.to_ascii_lowercase()).collect();
     (id.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-' || c == ' ')).then_some(id)
 }
 

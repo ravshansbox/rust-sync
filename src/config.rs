@@ -79,6 +79,10 @@ impl Config {
         self.shared.roots.iter().filter(|(_, r)| !r.removed)
     }
 
+    pub fn trusted_nodes(&self) -> impl Iterator<Item = (&String, &NodeEntry)> {
+        self.shared.nodes.iter().filter(|(_, n)| !n.removed)
+    }
+
     pub fn trusted(&self, id: &str) -> Option<&NodeEntry> {
         self.shared.nodes.get(id).filter(|n| !n.removed)
     }

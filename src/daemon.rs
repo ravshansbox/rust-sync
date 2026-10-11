@@ -323,14 +323,8 @@ impl Daemon {
 
     /// Dial every trusted node we are not connected to, except those waiting to retry.
     fn dial_all(&mut self) {
-        let ids: Vec<String> = self
-            .cfg
-            .shared
-            .nodes
-            .keys()
-            .filter(|id| !self.backoff.contains_key(*id))
-            .cloned()
-            .collect();
+        let ids: Vec<String> =
+            self.cfg.trusted_nodes().map(|(id, _)| id).filter(|id| !self.backoff.contains_key(*id)).cloned().collect();
         for id in ids {
             self.dial(&id);
         }
@@ -794,7 +788,7 @@ pub fn nodes_text(
     pending: &BTreeMap<String, String>,
 ) -> String {
     let mut s = String::new();
-    let nodes: Vec<_> = cfg.shared.nodes.iter().filter(|(_, n)| !n.removed).collect();
+    let nodes: Vec<_> = cfg.trusted_nodes().collect();
     if nodes.is_empty() {
         s.push_str("  (none) add one with `rust-sync node add <host>`\n");
     }

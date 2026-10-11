@@ -246,6 +246,18 @@ mod tests {
     }
 
     #[test]
+    fn save_replaces_an_existing_file_and_leaves_no_temp_file() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-config-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        Config { port: 1, ..Config::default() }.save(&path).unwrap();
+        Config { port: 2, ..Config::default() }.save(&path).unwrap();
+        assert_eq!(Config::load(&path).unwrap().port, 2);
+        assert!(!path.with_extension("tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn load_fails_when_the_file_cannot_be_read() {
         let dir = std::env::temp_dir().join(format!("rust-sync-config-unreadable-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

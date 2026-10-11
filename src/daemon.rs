@@ -11,6 +11,7 @@ use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
@@ -464,11 +465,12 @@ impl Daemon {
     fn status(&self) -> String {
         let mut s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
         let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some()).count();
-        s.push_str(&format!(
+        let _ = write!(
+            s,
             "\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
             self.downloads.len(),
             self.queued.len()
-        ));
+        );
         s
     }
 
@@ -825,12 +827,12 @@ pub fn nodes_text(
             Some(false) => "offline",
             None => "",
         };
-        s.push_str(&format!("  {}  {}  {state}\n", net::pretty_id(id), n.addr));
+        let _ = writeln!(s, "  {}  {}  {state}", net::pretty_id(id), n.addr);
     }
     if !pending.is_empty() {
         s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");
         for (id, addr) in pending {
-            s.push_str(&format!("  {}  {addr}\n", net::pretty_id(id)));
+            let _ = writeln!(s, "  {}  {addr}", net::pretty_id(id));
         }
     }
     s

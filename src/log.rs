@@ -23,9 +23,8 @@ pub fn to_file(path: PathBuf) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let file = OpenOptions::new().create(true).append(true).open(&path)?;
-    let size = file.metadata()?.len();
-    *FILE.lock().unwrap_or_else(PoisonError::into_inner) = Some(LogFile { path, file, size });
+    let log = LogFile::open(path)?;
+    *FILE.lock().unwrap_or_else(PoisonError::into_inner) = Some(log);
     Ok(())
 }
 
@@ -46,13 +45,18 @@ pub fn line(msg: std::fmt::Arguments) {
 }
 
 impl LogFile {
+    fn open(path: PathBuf) -> std::io::Result<Self> {
+        let file = OpenOptions::new().create(true).append(true).open(&path)?;
+        let size = file.metadata()?.len();
+        Ok(Self { path, file, size })
+    }
+
     /// `rust-sync.log` -> `rust-sync.log.1` (replacing an older one), then start a new file.
     fn rotate(&mut self) -> std::io::Result<()> {
         let mut old = OsString::from(&self.path);
         old.push(".1");
         std::fs::rename(&self.path, &old)?;
-        self.file = OpenOptions::new().create(true).append(true).open(&self.path)?;
-        self.size = 0;
+        *self = Self::open(self.path.clone())?;
         Ok(())
     }
 }

@@ -23,11 +23,11 @@ impl Vv {
         self.0.iter().find(|(n, _)| *n == node).map_or(0, |(_, c)| *c)
     }
 
-    pub fn bumped(&self, node: u64) -> Vv {
-        self.merged(&Vv(vec![(node, self.get(node) + 1)]))
+    pub fn bumped(&self, node: u64) -> Self {
+        self.merged(&Self(vec![(node, self.get(node) + 1)]))
     }
 
-    pub fn merged(&self, other: &Vv) -> Vv {
+    pub fn merged(&self, other: &Self) -> Self {
         let mut v = self.clone();
         for &(n, c) in &other.0 {
             match v.0.iter_mut().find(|(m, _)| *m == n) {
@@ -40,7 +40,7 @@ impl Vv {
     }
 
     /// How `self` relates to `other`.
-    pub fn compare(&self, other: &Vv) -> Order {
+    pub fn compare(&self, other: &Self) -> Order {
         let (mut newer, mut older) = (false, false);
         for &(n, _) in self.0.iter().chain(&other.0) {
             let (a, b) = (self.get(n), other.get(n));

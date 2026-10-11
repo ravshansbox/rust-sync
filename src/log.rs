@@ -82,3 +82,43 @@ macro_rules! log {
     ($($arg:tt)*) => { $crate::log::line(format_args!($($arg)*)) };
 }
 pub(crate) use log;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn civil_from_days_converts_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        assert_eq!(civil_from_days(59), (1970, 3, 1));
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+        assert_eq!(civil_from_days(11_017), (2000, 3, 1));
+        assert_eq!(civil_from_days(20_723), (2026, 9, 27));
+    }
+
+    #[test]
+    fn timestamp_has_fixed_format() {
+        let t = timestamp();
+        assert_eq!(t.len(), 20);
+        assert_eq!(&t[4..5], "-");
+        assert_eq!(&t[10..11], " ");
+        assert!(t.ends_with('Z'));
+    }
+
+    #[test]
+    fn rotate_moves_file_aside_and_starts_empty() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-log-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test.log");
+        std::fs::write(&path, "old\n").unwrap();
+        let file = OpenOptions::new().append(true).open(&path).unwrap();
+        let mut log = LogFile { path: path.clone(), file, size: 4 };
+        log.rotate().unwrap();
+        log.file.write_all(b"new\n").unwrap();
+        assert_eq!(log.size, 0);
+        assert_eq!(std::fs::read_to_string(dir.join("test.log.1")).unwrap(), "old\n");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

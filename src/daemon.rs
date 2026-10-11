@@ -1180,6 +1180,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_dials_wait_twice_as_long_each_time_up_to_a_limit_until_connected() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut waits = Vec::new();
+        for _ in 0..7 {
+            d.handle(Event::DialDone { id: "aa".into() });
+            waits.push(d.backoff["aa"].as_secs());
+        }
+        assert_eq!(waits, [1, 2, 4, 8, 16, MAX_BACKOFF.as_secs(), MAX_BACKOFF.as_secs()]);
+        let ctl = mpsc::unbounded_channel().0;
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        d.handle(Event::DialDone { id: "aa".into() });
+        assert!(d.backoff.is_empty());
+    }
+
+    #[tokio::test]
     async fn going_down_cancels_only_the_downloads_from_that_node() {
         let mut d = daemon();
         let me = d.me.clone();

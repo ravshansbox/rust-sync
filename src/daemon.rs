@@ -897,7 +897,7 @@ async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::UnboundedSender<
     loop {
         match l.accept().await {
             Ok((s, addr)) => {
-                drop(tokio::spawn(connection(s, addr.ip().to_canonical(), None, keys.clone(), tx.clone(), port)))
+                drop(tokio::spawn(connection(s, addr.ip().to_canonical(), None, keys.clone(), tx.clone(), port)));
             }
             Err(_) => tokio::time::sleep(Duration::from_secs(1)).await,
         }

@@ -212,8 +212,8 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     }
 
     log!("stopping");
-    for p in d.downloads.keys().cloned().collect::<Vec<_>>() {
-        d.cancel_download(&p);
+    for (_, dl) in d.downloads.drain() {
+        let _ = std::fs::remove_file(dl.tmp);
     }
     d.save_index();
     let _ = std::fs::remove_file(sock);

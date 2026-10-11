@@ -247,6 +247,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn frames_round_trip_and_truncated_frame_fails() {
+        let mut out = Vec::new();
+        write_frame(&mut out, b"hi").await.unwrap();
+        write_frame(&mut out, &[7; MAX_FRAME]).await.unwrap();
+        assert_eq!(&out[..4], [0, 2, b'h', b'i']);
+        let mut r = &out[..];
+        assert_eq!(read_frame(&mut r).await.unwrap(), b"hi");
+        assert_eq!(read_frame(&mut r).await.unwrap(), vec![7; MAX_FRAME]);
+        assert!(read_frame(&mut r).await.is_err());
+        let mut short = &out[..3];
+        assert!(read_frame(&mut short).await.is_err());
+    }
+
+    #[tokio::test]
     async fn handshake_exchanges_ids_and_messages() {
         let (a, b) = (new_keys(), new_keys());
         let ((mut br, _bw, b_sees), (_ar, mut aw, a_sees)) = connect(&a, &b).await;

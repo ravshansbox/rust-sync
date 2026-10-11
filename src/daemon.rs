@@ -1180,6 +1180,23 @@ mod tests {
     }
 
     #[test]
+    fn request_is_refused_outside_shared_folders_or_for_another_version() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        d.cfg.set_root(&me, "~/s", true, false);
+        d.index.insert("~/s/f".into(), meta(0, 0));
+        d.index.insert("~/x".into(), meta(0, 0));
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        while rx.try_recv().is_ok() {}
+        for (path, hash) in [("~/s/f", [2; 32]), ("~/x", [1; 32])] {
+            d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.into(), hash } });
+            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p }) if p == path));
+        }
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

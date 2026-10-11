@@ -87,6 +87,8 @@ pub(crate) use log;
 mod tests {
     use super::*;
 
+    static FILE_TESTS: Mutex<()> = Mutex::new(());
+
     #[test]
     fn civil_from_days_converts_known_dates() {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
@@ -108,6 +110,7 @@ mod tests {
 
     #[test]
     fn line_rotates_file_when_next_line_would_exceed_max_size() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("rust-sync-log-line-test-{}", std::process::id()));
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
@@ -119,6 +122,22 @@ mod tests {
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.ends_with(" hello rotation\n"));
         assert!(text.len() < MAX_SIZE as usize / 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn to_file_creates_missing_folder_and_appends_across_reopens() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let dir = std::env::temp_dir().join(format!("rust-sync-log-to-file-test-{}", std::process::id()));
+        let path = dir.join("nested/test.log");
+        to_file(path.clone()).unwrap();
+        line(format_args!("first"));
+        to_file(path.clone()).unwrap();
+        line(format_args!("second"));
+        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        let text = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<_> = text.lines().map(|l| &l[21..]).collect();
+        assert_eq!(lines, ["first", "second"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

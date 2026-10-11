@@ -226,7 +226,7 @@ impl Daemon {
             Event::Rescan => self.rescan_all(),
             Event::Tick => {
                 self.ticks += 1;
-                self.broadcast(Msg::Ping);
+                self.broadcast(&Msg::Ping);
                 self.dial_all();
                 if self.ticks.is_multiple_of(RESCAN_TICKS) {
                     self.rescan_all();
@@ -355,7 +355,7 @@ impl Daemon {
         });
     }
 
-    fn broadcast(&self, msg: Msg) {
+    fn broadcast(&self, msg: &Msg) {
         for p in self.peers.values() {
             let _ = p.ctl.send(msg.clone());
         }
@@ -367,7 +367,7 @@ impl Daemon {
             return;
         }
         for batch in batches(std::mem::take(&mut self.outbox)) {
-            self.broadcast(Msg::Index(batch));
+            self.broadcast(&Msg::Index(batch));
         }
     }
 
@@ -418,7 +418,7 @@ impl Daemon {
                 .collect();
             self.outbox.extend(known);
         }
-        self.broadcast(Msg::Config(self.cfg.shared.clone()));
+        self.broadcast(&Msg::Config(self.cfg.shared.clone()));
         self.dial_all();
     }
 

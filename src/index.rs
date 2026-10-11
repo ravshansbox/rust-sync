@@ -264,4 +264,12 @@ mod tests {
         let got: Vec<_> = under(&index, "~/a").cloned().collect();
         assert_eq!(got, ["~/a", "~/a/b", "~/a/c/d"]);
     }
+
+    #[test]
+    fn nanos_is_signed_offset_from_unix_epoch() {
+        let d = std::time::Duration::new(3, 5);
+        assert_eq!(nanos(UNIX_EPOCH), 0);
+        assert_eq!(nanos(UNIX_EPOCH + d), 3_000_000_005);
+        assert_eq!(nanos(UNIX_EPOCH - d), -3_000_000_005);
+    }
 }

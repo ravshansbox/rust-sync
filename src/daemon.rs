@@ -743,9 +743,8 @@ impl Daemon {
     }
 
     fn drop_downloads_from(&mut self, id: &str) {
-        let paths: Vec<String> = self.downloads.iter().filter(|(_, d)| d.from == id).map(|(p, _)| p.clone()).collect();
-        for p in paths {
-            self.cancel_download(&p);
+        for (_, d) in self.downloads.extract_if(|_, d| d.from == id) {
+            let _ = std::fs::remove_file(d.tmp);
         }
         self.queued.retain(|_, (from, _)| from != id);
     }

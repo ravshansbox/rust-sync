@@ -24,13 +24,7 @@ impl Vv {
     }
 
     pub fn bumped(&self, node: u64) -> Vv {
-        let mut v = self.clone();
-        match v.0.iter_mut().find(|(n, _)| *n == node) {
-            Some((_, c)) => *c += 1,
-            None => v.0.push((node, 1)),
-        }
-        v.0.sort_unstable();
-        v
+        self.merged(&Vv(vec![(node, self.get(node) + 1)]))
     }
 
     pub fn merged(&self, other: &Vv) -> Vv {

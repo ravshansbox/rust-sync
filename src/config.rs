@@ -197,6 +197,26 @@ mod tests {
     }
 
     #[test]
+    fn merge_takes_peer_nodes_and_breaks_equal_counters_by_node_id() {
+        let mut ours = Config::default();
+        ours.set_node("me", "p1", "old:1", false);
+        let mut theirs = Config { clock: 5, ..Config::default() };
+        theirs.set_node("peer", "p1", "new:1", false);
+        theirs.set_node("peer", "p2", "new:2", false);
+        assert!(ours.merge(&theirs.shared, "me"));
+        assert_eq!(ours.trusted("p1").unwrap().addr, "new:1");
+        assert_eq!(ours.trusted("p2").unwrap().addr, "new:2");
+        let mut low = Config::default();
+        low.set_node("a", "p1", "a:1", false);
+        let mut high = Config::default();
+        high.set_node("b", "p1", "b:1", false);
+        assert!(!high.merge(&low.shared, "me"));
+        assert!(low.merge(&high.shared, "me"));
+        assert_eq!(low.trusted("p1").unwrap().addr, "b:1");
+        assert_eq!(high.trusted("p1").unwrap().addr, "b:1");
+    }
+
+    #[test]
     fn merge_ignores_entries_about_ourselves() {
         let mut ours = Config::default();
         let mut theirs = Config { clock: 3, ..Config::default() };

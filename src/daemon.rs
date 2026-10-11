@@ -1331,6 +1331,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn probe_gets_a_hello_back_but_does_not_bring_the_connection_up() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-probe-{}", std::process::id()));
+        let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let prober = async {
+            let s = TcpStream::connect(addr).await.unwrap();
+            let (mut r, mut w, _) = net::handshake(s, &a, true).await.unwrap();
+            w.send(&Msg::Hello { port: 4000, probe: true, trusts_you: true }).await.unwrap();
+            r.recv().await.unwrap()
+        };
+        let listener = async {
+            let (s, peer) = l.accept().await.unwrap();
+            connection_inner(s, peer.ip(), None, b.clone(), tx, 5000).await
+        };
+        let answer = async {
+            let Some(Event::Auth { id, addr, reply }) = rx.recv().await else { panic!() };
+            reply.send(true).unwrap();
+            (id, addr, rx.recv().await.is_none())
+        };
+        let (reply, res, seen) = tokio::join!(prober, listener, answer);
+        res.unwrap();
+        let Msg::Hello { port: 5000, probe: false, trusts_you: true } = reply else { panic!() };
+        assert_eq!(seen, (a.id(), Some("127.0.0.1:4000".into()), true));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
         let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
         let _ = std::fs::remove_file(&sock);

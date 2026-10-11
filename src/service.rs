@@ -29,16 +29,16 @@ enum Mode {
 impl Mode {
     fn plist(self) -> PathBuf {
         match self {
-            Mode::Agent => paths::home().join("Library/LaunchAgents").join(format!("{LABEL}.plist")),
-            Mode::System => PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")),
+            Self::Agent => paths::home().join("Library/LaunchAgents").join(format!("{LABEL}.plist")),
+            Self::System => PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")),
         }
     }
 
     /// launchd domain, e.g. `gui/501` or `system`.
     fn domain(self) -> anyhow::Result<String> {
         match self {
-            Mode::Agent => Ok(format!("gui/{}", uid()?)),
-            Mode::System => Ok("system".into()),
+            Self::Agent => Ok(format!("gui/{}", uid()?)),
+            Self::System => Ok("system".into()),
         }
     }
 
@@ -50,16 +50,16 @@ impl Mode {
     /// When the daemon starts by itself: "login" or "boot".
     fn when(self) -> &'static str {
         match self {
-            Mode::Agent => "login",
-            Mode::System => "boot",
+            Self::Agent => "login",
+            Self::System => "boot",
         }
     }
 
     /// Run `launchctl`, with `sudo` for the system domain.
     fn launchctl(self, args: &[&str]) -> anyhow::Result<std::process::Output> {
         let mut cmd = match self {
-            Mode::Agent => Command::new("launchctl"),
-            Mode::System => {
+            Self::Agent => Command::new("launchctl"),
+            Self::System => {
                 let mut sudo = Command::new("sudo");
                 sudo.arg("launchctl");
                 sudo

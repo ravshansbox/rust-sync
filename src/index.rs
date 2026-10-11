@@ -225,6 +225,11 @@ mod tests {
     }
 
     #[test]
+    fn compare_counts_nodes_only_we_know() {
+        assert_eq!(vv(&[(1, 1), (2, 1)]).compare(&vv(&[(1, 1)])), Order::Newer);
+    }
+
+    #[test]
     fn decide_takes_remote_when_unknown_locally_or_newer() {
         let r = meta(Some(1), 0, 1, vv(&[(1, 2)]));
         assert_eq!(decide(None, &r), Action::Take);

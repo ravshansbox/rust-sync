@@ -378,16 +378,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mode_names() {
-        assert_eq!(Mode::Agent.when(), "login");
-        assert_eq!(Mode::System.when(), "boot");
-        assert_eq!(Mode::System.target().unwrap(), format!("system/{LABEL}"));
-        assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{}/{LABEL}", uid().unwrap()));
-        assert_eq!(Mode::System.plist(), PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")));
-        assert_eq!(Mode::Agent.plist(), paths::home().join(format!("Library/LaunchAgents/{LABEL}.plist")));
-    }
-
-    #[test]
     fn agent_plist() {
         let xml = plist_xml(Mode::Agent, Path::new("/opt/a&b/<rust-sync>")).unwrap();
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"));

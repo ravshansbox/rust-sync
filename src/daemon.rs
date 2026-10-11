@@ -1506,6 +1506,28 @@ mod tests {
     }
 
     #[test]
+    fn same_content_with_a_new_mode_from_remote_changes_only_the_permissions() {
+        let mut d = daemon();
+        let dir = test_dir("mode");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.sh");
+        std::fs::write(&lp, "mine").unwrap();
+        std::fs::set_permissions(&lp, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.sh".into(), local);
+        let mut r = meta(0, 1);
+        r.mode = 0o755;
+        r.vv = Vv(vec![(1, 2)]);
+        d.apply("aa", "~/s/f.sh", &lp, r, None);
+        assert_eq!(std::fs::metadata(&lp).unwrap().permissions().mode() & 0o777, 0o755);
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "mine");
+        assert_eq!(d.index["~/s/f.sh"].mode, 0o755);
+        assert!(d.downloads.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn downloaded_conflict_loser_changes_nothing_and_removes_the_temp_file() {
         let mut d = daemon();
         let dir = test_dir("local-wins");

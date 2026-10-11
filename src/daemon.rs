@@ -305,7 +305,6 @@ impl Daemon {
         self.peers.insert(id, peer);
     }
 
-    /// Dial every trusted node we are not connected to, except those waiting to retry.
     fn add_pending(&mut self, id: String, addr: String) {
         self.pending_order.retain(|x| *x != id);
         self.pending_order.push_back(id.clone());
@@ -322,6 +321,7 @@ impl Daemon {
         self.pending_order.retain(|x| x != id);
     }
 
+    /// Dial every trusted node we are not connected to, except those waiting to retry.
     fn dial_all(&mut self) {
         let ids: Vec<String> = self
             .cfg

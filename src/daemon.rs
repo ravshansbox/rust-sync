@@ -1080,6 +1080,10 @@ mod tests {
         Entry { path, meta: m }
     }
 
+    fn test_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
+    }
+
     fn daemon() -> Daemon {
         let keys = Arc::new(Keys { private: vec![0; 32], public: vec![1; 32] });
         let me = keys.id();
@@ -1226,7 +1230,7 @@ mod tests {
             d.cfg.set_node(&me, id, "h:1", false);
             let ctl = mpsc::unbounded_channel().0;
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
-            let tmp = std::env::temp_dir().join(format!("rust-sync-down-{id}-{}", std::process::id()));
+            let tmp = test_dir(&format!("down-{id}"));
             let file = File::create(&tmp).unwrap();
             let dl = Download { from: id.into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
             d.downloads.insert(format!("~/s/{id}"), dl);
@@ -1326,7 +1330,7 @@ mod tests {
             let ctl = mpsc::unbounded_channel().0;
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
-        let tmp = std::env::temp_dir().join(format!("rust-sync-unavailable-{}", std::process::id()));
+        let tmp = test_dir("unavailable");
         let file = File::create(&tmp).unwrap();
         let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
         d.downloads.insert("~/s/f".into(), dl);
@@ -1345,7 +1349,7 @@ mod tests {
             let ctl = mpsc::unbounded_channel().0;
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
-        let tmp = std::env::temp_dir().join(format!("rust-sync-data-{}", std::process::id()));
+        let tmp = test_dir("data");
         let file = File::create(&tmp).unwrap();
         let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
         d.downloads.insert("~/s/f".into(), dl);
@@ -1364,7 +1368,7 @@ mod tests {
         d.cfg.set_node(&me, "aa", "h:1", false);
         let ctl = mpsc::unbounded_channel().0;
         d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
-        let tmp = std::env::temp_dir().join(format!("rust-sync-mismatch-{}", std::process::id()));
+        let tmp = test_dir("mismatch");
         let file = File::create(&tmp).unwrap();
         let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
         d.downloads.insert("~/s/f".into(), dl);
@@ -1377,7 +1381,7 @@ mod tests {
     #[test]
     fn a_running_download_is_replaced_only_by_a_newer_version() {
         let mut d = daemon();
-        let tmp = std::env::temp_dir().join(format!("rust-sync-replace-{}", std::process::id()));
+        let tmp = test_dir("replace");
         let file = File::create(&tmp).unwrap();
         let mut running = meta(0, 0);
         running.vv = Vv(vec![(1, 2)]);
@@ -1399,7 +1403,7 @@ mod tests {
     #[test]
     fn when_downloads_are_full_the_queue_keeps_the_newest_version() {
         let mut d = daemon();
-        let tmp = std::env::temp_dir().join(format!("rust-sync-queue-{}", std::process::id()));
+        let tmp = test_dir("queue");
         for n in 0..MAX_DOWNLOADS {
             let file = File::create(&tmp).unwrap();
             let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
@@ -1419,7 +1423,7 @@ mod tests {
     #[test]
     fn queue_waits_for_a_free_slot_and_drops_files_from_offline_nodes() {
         let mut d = daemon();
-        let tmp = std::env::temp_dir().join(format!("rust-sync-pump-{}", std::process::id()));
+        let tmp = test_dir("pump");
         for n in 0..MAX_DOWNLOADS {
             let file = File::create(&tmp).unwrap();
             let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
@@ -1439,7 +1443,7 @@ mod tests {
     #[test]
     fn downloaded_conflict_winner_replaces_the_file_and_keeps_the_local_copy() {
         let mut d = daemon();
-        let dir = std::env::temp_dir().join(format!("rust-sync-conflict-{}", std::process::id()));
+        let dir = test_dir("conflict");
         std::fs::create_dir_all(&dir).unwrap();
         let lp = dir.join("f.txt");
         let tmp = dir.join("tmp");
@@ -1463,7 +1467,7 @@ mod tests {
     #[test]
     fn newer_remote_deletion_removes_the_local_file() {
         let mut d = daemon();
-        let dir = std::env::temp_dir().join(format!("rust-sync-delete-{}", std::process::id()));
+        let dir = test_dir("delete");
         std::fs::create_dir_all(&dir).unwrap();
         let lp = dir.join("f.txt");
         std::fs::write(&lp, "mine").unwrap();
@@ -1504,7 +1508,7 @@ mod tests {
     #[test]
     fn downloaded_conflict_loser_changes_nothing_and_removes_the_temp_file() {
         let mut d = daemon();
-        let dir = std::env::temp_dir().join(format!("rust-sync-local-wins-{}", std::process::id()));
+        let dir = test_dir("local-wins");
         std::fs::create_dir_all(&dir).unwrap();
         let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
         std::fs::write(&lp, "mine").unwrap();
@@ -1528,7 +1532,7 @@ mod tests {
     fn local_file_changes_are_recorded_but_a_touch_is_not_a_new_version() {
         let mut d = daemon();
         let me = d.me_short;
-        let dir = std::env::temp_dir().join(format!("rust-sync-check-{}", std::process::id()));
+        let dir = test_dir("check");
         std::fs::create_dir_all(&dir).unwrap();
         let lp = dir.join("f.txt");
         let p = "~/s/f.txt";
@@ -1565,7 +1569,7 @@ mod tests {
     fn remote_entries_outside_roots_or_for_ignored_names_are_skipped_and_unseen_local_changes_count() {
         let mut d = daemon();
         let me = d.me.clone();
-        let dir = std::env::temp_dir().join(format!("rust-sync-entry-{}", std::process::id()));
+        let dir = test_dir("entry");
         let root = dir.join("in");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(dir.join("out")).unwrap();
@@ -1589,7 +1593,7 @@ mod tests {
     fn file_events_are_checked_only_inside_roots_and_skip_ignored_names() {
         let mut d = daemon();
         let me = d.me.clone();
-        let dir = std::env::temp_dir().join(format!("rust-sync-fs-{}", std::process::id()));
+        let dir = test_dir("fs");
         let root = dir.join("in");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(dir.join("out")).unwrap();
@@ -1609,7 +1613,7 @@ mod tests {
     fn watches_follow_active_roots_with_files_watched_through_their_folder() {
         let mut d = daemon();
         let me = d.me.clone();
-        let dir = std::env::temp_dir().join(format!("rust-sync-watch-{}", std::process::id()));
+        let dir = test_dir("watch");
         let (a, b, c) = (dir.join("a"), dir.join("b"), dir.join("c"));
         d.cfg.set_root(&me, a.to_str().unwrap(), true, false);
         d.cfg.set_root(&me, b.join("f.txt").to_str().unwrap(), false, false);
@@ -1629,7 +1633,7 @@ mod tests {
     fn rescan_checks_only_active_roots() {
         let mut d = daemon();
         let me = d.me.clone();
-        let dir = std::env::temp_dir().join(format!("rust-sync-rescan-{}", std::process::id()));
+        let dir = test_dir("rescan");
         for (name, removed) in [("a", false), ("b", true)] {
             std::fs::create_dir_all(dir.join(name)).unwrap();
             std::fs::write(dir.join(name).join("f.txt"), "x").unwrap();
@@ -1645,7 +1649,7 @@ mod tests {
     fn tree_check_records_nested_files_skips_ignored_names_and_marks_missing_files_deleted() {
         let mut d = daemon();
         let me = d.me.clone();
-        let dir = std::env::temp_dir().join(format!("rust-sync-tree-{}", std::process::id()));
+        let dir = test_dir("tree");
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         let root = dir.to_str().unwrap().to_string();
         d.cfg.set_root(&me, &root, true, false);
@@ -1782,7 +1786,7 @@ mod tests {
 
     #[tokio::test]
     async fn upload_sends_file_in_chunks_then_eof_or_unavailable_when_missing() {
-        let lp = std::env::temp_dir().join(format!("rust-sync-upload-{}", std::process::id()));
+        let lp = test_dir("upload");
         let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();
         std::fs::write(&lp, &data).unwrap();
         let (tx, mut rx) = mpsc::channel(8);
@@ -1812,7 +1816,7 @@ mod tests {
 
     #[tokio::test]
     async fn dial_reports_done_when_the_peer_cannot_be_reached() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-dial-{}", std::process::id()));
+        let dir = test_dir("dial");
         let keys = Arc::new(net::load_or_create_keys(&dir).unwrap());
         let addr = TcpListener::bind("127.0.0.1:0").await.unwrap().local_addr().unwrap();
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -1825,7 +1829,7 @@ mod tests {
 
     #[tokio::test]
     async fn connection_rejects_a_peer_whose_id_is_not_the_one_dialled() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-conn-{}", std::process::id()));
+        let dir = test_dir("conn");
         let keys = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let other = net::load_or_create_keys(&dir.join("b")).unwrap();
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1847,7 +1851,7 @@ mod tests {
 
     #[tokio::test]
     async fn connection_does_not_come_up_when_the_listener_does_not_trust_the_dialler() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-trust-{}", std::process::id()));
+        let dir = test_dir("trust");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1877,7 +1881,7 @@ mod tests {
 
     #[tokio::test]
     async fn trusted_connection_comes_up_carries_messages_and_goes_down() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-up-{}", std::process::id()));
+        let dir = test_dir("up");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1922,7 +1926,7 @@ mod tests {
 
     #[tokio::test]
     async fn probe_gets_a_hello_back_but_does_not_bring_the_connection_up() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-probe-{}", std::process::id()));
+        let dir = test_dir("probe");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1952,7 +1956,7 @@ mod tests {
 
     #[tokio::test]
     async fn accept_loop_serves_each_incoming_connection_with_its_ipv4_address() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-accept-{}", std::process::id()));
+        let dir = test_dir("accept");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
         let l = TcpListener::bind("[::]:0").await.unwrap();

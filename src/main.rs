@@ -299,3 +299,36 @@ async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn list_and_remove_aliases_parse() {
+        let parse = |args: &[&str]| Cli::try_parse_from(std::iter::once("rust-sync").chain(args.iter().copied()));
+        assert!(matches!(parse(&["path", "ls"]).unwrap().cmd, Cmd::Path { cmd: PathCmd::List }));
+        assert!(matches!(parse(&["node", "ls"]).unwrap().cmd, Cmd::Node { cmd: NodeCmd::List }));
+        let Cmd::Path { cmd: PathCmd::Remove { path } } = parse(&["path", "rm", "a"]).unwrap().cmd else { panic!() };
+        assert_eq!(path, PathBuf::from("a"));
+        let Cmd::Node { cmd: NodeCmd::Remove { id } } = parse(&["node", "rm", "x"]).unwrap().cmd else { panic!() };
+        assert_eq!(id, "x");
+    }
+
+    #[test]
+    fn node_add_flags_parse() {
+        let cli = Cli::try_parse_from(["rust-sync", "node", "add", "host:1", "--id", "ab", "-y"]).unwrap();
+        let Cmd::Node { cmd: NodeCmd::Add(a) } = cli.cmd else { panic!() };
+        assert_eq!((a.addr.as_str(), a.id.as_deref(), a.yes), ("host:1", Some("ab"), true));
+        let cli = Cli::try_parse_from(["rust-sync", "node", "add", "host"]).unwrap();
+        let Cmd::Node { cmd: NodeCmd::Add(a) } = cli.cmd else { panic!() };
+        assert_eq!((a.id, a.yes), (None, false));
+        assert!(Cli::try_parse_from(["rust-sync", "node", "add"]).is_err());
+    }
+}

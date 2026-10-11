@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn load_missing_file_gives_default_and_save_round_trips() {
+    fn load_missing_file_gives_default_damaged_file_fails_and_save_round_trips() {
         let dir = std::env::temp_dir().join(format!("rust-sync-config-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
@@ -220,6 +220,8 @@ mod tests {
         assert_eq!(back.port, 1234);
         assert_eq!(back.clock, 1);
         assert!(back.shared.roots.contains_key("~/a"));
+        std::fs::write(&path, b"not json").unwrap();
+        assert!(Config::load(&path).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

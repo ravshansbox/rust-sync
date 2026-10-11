@@ -93,6 +93,14 @@ mod tests {
 
     static FILE_TESTS: Mutex<()> = Mutex::new(());
 
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("rust-sync-log-{name}-test-{}", std::process::id()))
+    }
+
+    fn close_file() {
+        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    }
+
     #[test]
     fn civil_from_days_converts_known_dates() {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
@@ -115,14 +123,14 @@ mod tests {
     #[test]
     fn line_rotates_file_when_next_line_would_exceed_max_size_replacing_an_older_rotated_file() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
-        let dir = std::env::temp_dir().join(format!("rust-sync-log-line-test-{}", std::process::id()));
+        let dir = test_dir("line");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("test.log.1"), "older").unwrap();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
         to_file(path.clone()).unwrap();
         line(format_args!("hello rotation"));
-        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        close_file();
         assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE - 10);
         assert!(!dir.join("test.log.1.1").exists());
         let text = std::fs::read_to_string(&path).unwrap();
@@ -134,14 +142,14 @@ mod tests {
     #[test]
     fn line_keeps_file_when_next_line_reaches_max_size_exactly() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
-        let dir = std::env::temp_dir().join(format!("rust-sync-log-limit-test-{}", std::process::id()));
+        let dir = test_dir("limit");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         let line_len = timestamp().len() + " hello\n".len();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
         to_file(path.clone()).unwrap();
         line(format_args!("hello"));
-        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        close_file();
         assert!(!dir.join("test.log.1").exists());
         assert_eq!(std::fs::metadata(&path).unwrap().len(), MAX_SIZE);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -150,13 +158,13 @@ mod tests {
     #[test]
     fn to_file_creates_missing_folder_and_appends_across_reopens() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
-        let dir = std::env::temp_dir().join(format!("rust-sync-log-to-file-test-{}", std::process::id()));
+        let dir = test_dir("to-file");
         let path = dir.join("nested/test.log");
         to_file(path.clone()).unwrap();
         line(format_args!("first"));
         to_file(path.clone()).unwrap();
         line(format_args!("second"));
-        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        close_file();
         let text = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<_> = text.lines().map(|l| &l[21..]).collect();
         assert_eq!(lines, ["first", "second"]);

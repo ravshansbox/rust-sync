@@ -1320,6 +1320,28 @@ mod tests {
     }
 
     #[test]
+    fn a_running_download_is_replaced_only_by_a_newer_version() {
+        let mut d = daemon();
+        let tmp = std::env::temp_dir().join(format!("rust-sync-replace-{}", std::process::id()));
+        let file = File::create(&tmp).unwrap();
+        let mut running = meta(0, 0);
+        running.vv = Vv(vec![(1, 2)]);
+        let dl = Download { from: "aa".into(), meta: running, tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        d.downloads.insert("~/s/f".into(), dl);
+        let mut r = meta(0, 0);
+        for n in [1, 2] {
+            r.vv = Vv(vec![(1, n)]);
+            d.start_download("aa", "~/s/f", r.clone());
+            assert!(tmp.exists());
+            assert!(d.downloads.contains_key("~/s/f"));
+        }
+        r.vv = Vv(vec![(1, 3)]);
+        d.start_download("aa", "~/s/f", r);
+        assert!(!tmp.exists());
+        assert!(d.downloads.is_empty());
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

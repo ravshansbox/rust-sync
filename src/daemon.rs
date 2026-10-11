@@ -470,11 +470,8 @@ impl Daemon {
                 want.entry(parent.to_path_buf()).or_insert(RecursiveMode::NonRecursive);
             }
         }
-        let stale: Vec<PathBuf> =
-            self.watched.iter().filter(|(p, m)| want.get(*p) != Some(m)).map(|(p, _)| p.clone()).collect();
-        for p in stale {
+        for (p, _) in self.watched.extract_if(|p, m| want.get(p) != Some(m)) {
             let _ = self.watcher.unwatch(&p);
-            self.watched.remove(&p);
         }
         for (p, m) in want {
             if self.watched.contains_key(&p) {

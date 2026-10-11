@@ -1197,6 +1197,22 @@ mod tests {
     }
 
     #[test]
+    fn connected_node_gets_config_then_only_index_entries_in_shared_folders() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        d.cfg.set_root(&me, "~/s", true, false);
+        d.index.insert("~/s/f".into(), meta(0, 0));
+        d.index.insert("~/x".into(), meta(0, 0));
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        assert!(matches!(rx.try_recv(), Ok(Msg::Config(_))));
+        let Ok(Msg::Index(entries)) = rx.try_recv() else { panic!("no index sent") };
+        assert_eq!(entries.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(), ["~/s/f"]);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

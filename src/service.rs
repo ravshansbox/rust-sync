@@ -114,7 +114,7 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
             }
         }
     }
-    if ctl::call(&Req::Status).await?.is_some() {
+    if running().await? {
         bail!("a daemon is already running. Stop it first (Ctrl-C where it runs), then run this again.");
     }
     let plist = mode.plist();

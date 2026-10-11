@@ -98,9 +98,7 @@ pub fn load(path: &Path) -> Index {
 }
 
 pub fn save(index: &Index, path: &Path) -> anyhow::Result<()> {
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, postcard::to_stdvec(index)?)?;
-    std::fs::rename(tmp, path)?;
+    crate::paths::write_atomic(path, &postcard::to_stdvec(index)?)?;
     Ok(())
 }
 

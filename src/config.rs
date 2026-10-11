@@ -56,9 +56,7 @@ impl Config {
     }
 
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, serde_json::to_vec_pretty(self)?)?;
-        std::fs::rename(tmp, path)?;
+        crate::paths::write_atomic(path, &serde_json::to_vec_pretty(self)?)?;
         Ok(())
     }
 

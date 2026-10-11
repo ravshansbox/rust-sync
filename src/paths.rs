@@ -64,6 +64,13 @@ pub fn is_under(path: &str, root: &str) -> bool {
     }
 }
 
+/// Write `bytes` to a temporary file next to `path`, then rename it into place.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(tmp, path)
+}
+
 /// Files we never sync: our temporary files and macOS clutter.
 pub fn ignored(name: &str) -> bool {
     name.ends_with(".rsync-tmp") || name == ".DS_Store"

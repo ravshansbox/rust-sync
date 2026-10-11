@@ -60,7 +60,7 @@ impl LogFile {
 /// Current time as `2026-09-27 12:34:56Z`.
 fn timestamp() -> String {
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let (y, m, d) = civil_from_days((secs / 86_400) as i64);
+    let (y, m, d) = civil_from_days((secs / 86_400).cast_signed());
     let s = secs % 86_400;
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02}Z", s / 3600, s % 3600 / 60, s % 60)
 }

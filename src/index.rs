@@ -105,12 +105,10 @@ pub fn save(index: &Index, path: &Path) -> anyhow::Result<()> {
 }
 
 /// Entries whose path is `prefix` or inside it.
-pub fn under<'a>(index: &'a Index, prefix: &'a str) -> impl Iterator<Item = &'a String> + 'a {
+pub fn under<'a>(index: &'a Index, prefix: &'a str) -> impl Iterator<Item = (&'a String, &'a FileMeta)> + 'a {
     let dir = if prefix.ends_with('/') { prefix.to_string() } else { format!("{prefix}/") };
-    let own = index.get_key_value(prefix).map(|(k, _)| k);
-    own.into_iter().chain(
-        index.range(dir.clone()..).map(|(k, _)| k).take_while(move |k| k.starts_with(&dir)),
-    )
+    let own = index.get_key_value(prefix);
+    own.into_iter().chain(index.range(dir.clone()..).take_while(move |(k, _)| k.starts_with(&dir)))
 }
 
 pub struct Stat {
@@ -274,9 +272,9 @@ mod tests {
     fn under_matches_prefix_and_its_children_only_with_or_without_trailing_slash() {
         let m = meta(Some(1), 0, 1, Vv::default());
         let index: Index = ["~/a", "~/a/b", "~/a/c/d", "~/ab", "~/b"].map(|k| (k.to_string(), m.clone())).into();
-        let got: Vec<_> = under(&index, "~/a").cloned().collect();
+        let got: Vec<_> = under(&index, "~/a").map(|(k, _)| k.clone()).collect();
         assert_eq!(got, ["~/a", "~/a/b", "~/a/c/d"]);
-        let got: Vec<_> = under(&index, "~/a/").cloned().collect();
+        let got: Vec<_> = under(&index, "~/a/").map(|(k, _)| k.clone()).collect();
         assert_eq!(got, ["~/a/b", "~/a/c/d"]);
     }
 

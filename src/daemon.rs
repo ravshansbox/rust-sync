@@ -415,7 +415,7 @@ impl Daemon {
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
             let known: Vec<Entry> = index::under(&self.index, root)
-                .map(|p| Entry { path: p.clone(), meta: self.index[p].clone() })
+                .map(|(p, m)| Entry { path: p.clone(), meta: m.clone() })
                 .collect();
             self.outbox.extend(known);
         }
@@ -519,8 +519,8 @@ impl Daemon {
             }
         }
         let missing: Vec<String> = index::under(&self.index, p)
-            .filter(|k| !seen.contains(*k) && self.cfg.root_of(k).is_some())
-            .cloned()
+            .filter(|(k, _)| !seen.contains(*k) && self.cfg.root_of(k).is_some())
+            .map(|(k, _)| k.clone())
             .collect();
         for k in missing {
             if let Some(l) = paths::to_local(&k) {

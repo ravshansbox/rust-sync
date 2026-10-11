@@ -1095,6 +1095,47 @@ mod tests {
         Entry { path, meta: m }
     }
 
+    fn daemon() -> Daemon {
+        let keys = Arc::new(Keys { private: vec![0; 32], public: vec![1; 32] });
+        let me = keys.id();
+        Daemon {
+            me_short: net::short_id(&me),
+            me,
+            keys,
+            cfg: Config::default(),
+            index: Index::new(),
+            peers: HashMap::new(),
+            dialling: HashSet::new(),
+            backoff: HashMap::new(),
+            pending: BTreeMap::new(),
+            pending_order: VecDeque::new(),
+            downloads: HashMap::new(),
+            queued: BTreeMap::new(),
+            uploads: Arc::new(Semaphore::new(MAX_UPLOADS)),
+            watcher: notify::recommended_watcher(|_: notify::Result<notify::Event>| {}).unwrap(),
+            watched: HashMap::new(),
+            tx: mpsc::unbounded_channel().0,
+            outbox: Vec::new(),
+            index_dirty: false,
+            ticks: 0,
+        }
+    }
+
+    #[test]
+    fn untrusted_nodes_are_listed_until_newer_ones_push_the_oldest_out() {
+        let mut d = daemon();
+        for i in 0..=MAX_PENDING {
+            let (reply, mut rx) = oneshot::channel();
+            d.handle(Event::Auth { id: format!("{i:02}"), addr: Some(format!("h:{i}")), reply });
+            assert!(!rx.try_recv().unwrap());
+        }
+        let text = d.on_ctl(Req::ListNodes).text;
+        assert!(!text.contains("  00  h:0\n"), "{text}");
+        assert!(text.contains("  01  h:1\n"), "{text}");
+        assert!(text.contains(&format!("  {MAX_PENDING}  h:{MAX_PENDING}\n")), "{text}");
+        assert_eq!(text.matches("  h:").count(), MAX_PENDING);
+    }
+
     #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);

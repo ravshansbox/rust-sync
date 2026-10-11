@@ -8,6 +8,7 @@ use crate::config::Shared;
 use crate::index::Entry;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 use snow::{Builder, TransportState};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -64,7 +65,10 @@ pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
 }
 
 pub fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 
 /// Node ID in groups of 8 characters, for reading aloud or comparing by eye.

@@ -1149,6 +1149,24 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_connection_is_kept_only_if_dialled_by_the_lower_id() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        for (id, keep) in [("00", false), ("ff", true)] {
+            d.cfg.set_node(&me, id, "h:1", false);
+            let mut up = |conn, outbound| {
+                let (ctl, mut rx) = mpsc::unbounded_channel();
+                let data = mpsc::channel(1).0;
+                d.handle(Event::Up { id: id.into(), conn, outbound, ctl, data });
+                matches!(rx.try_recv(), Ok(Msg::Config(_)))
+            };
+            assert!(up(1, !keep));
+            assert!(!up(2, !keep));
+            assert!(up(3, keep));
+        }
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

@@ -739,7 +739,7 @@ impl Daemon {
         self.queued.retain(|_, (from, _)| from != id);
     }
 
-    fn on_request(&mut self, from: &str, path: String, hash: [u8; 32]) {
+    fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
         let Some(peer) = self.peers.get(from) else { return };
         let ok = self.cfg.root_of(&path).is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
         match paths::to_local(&path) {

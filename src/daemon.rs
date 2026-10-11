@@ -1606,6 +1606,22 @@ mod tests {
     }
 
     #[test]
+    fn rescan_checks_only_active_roots() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = std::env::temp_dir().join(format!("rust-sync-rescan-{}", std::process::id()));
+        for (name, removed) in [("a", false), ("b", true)] {
+            std::fs::create_dir_all(dir.join(name)).unwrap();
+            std::fs::write(dir.join(name).join("f.txt"), "x").unwrap();
+            d.cfg.set_root(&me, dir.join(name).to_str().unwrap(), true, removed);
+        }
+        d.handle(Event::Rescan);
+        let keys: Vec<_> = d.index.keys().cloned().collect();
+        assert_eq!(keys, [dir.join("a/f.txt").to_str().unwrap()]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn tree_check_records_nested_files_skips_ignored_names_and_marks_missing_files_deleted() {
         let mut d = daemon();
         let me = d.me.clone();

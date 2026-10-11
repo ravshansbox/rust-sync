@@ -212,6 +212,11 @@ mod tests {
     }
 
     #[test]
+    fn merged_keeps_our_count_when_it_is_higher() {
+        assert_eq!(vv(&[(1, 5)]).merged(&vv(&[(1, 2)])), vv(&[(1, 5)]));
+    }
+
+    #[test]
     fn compare_orders_version_vectors() {
         assert_eq!(vv(&[(1, 1)]).compare(&vv(&[(1, 1)])), Order::Equal);
         assert_eq!(vv(&[(1, 2)]).compare(&vv(&[(1, 1)])), Order::Newer);

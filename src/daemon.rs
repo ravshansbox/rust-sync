@@ -1303,6 +1303,23 @@ mod tests {
     }
 
     #[test]
+    fn download_whose_content_does_not_match_its_hash_is_dropped() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let ctl = mpsc::unbounded_channel().0;
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let tmp = std::env::temp_dir().join(format!("rust-sync-mismatch-{}", std::process::id()));
+        let file = File::create(&tmp).unwrap();
+        let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        d.downloads.insert("~/s/f".into(), dl);
+        let msg = Msg::Data { path: "~/s/f".into(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert!(d.downloads.is_empty());
+        assert!(!tmp.exists());
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

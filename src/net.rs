@@ -292,6 +292,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn recv_rejects_frame_not_encrypted_by_peer() {
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
+        write_frame(&mut aw.w, &[0; 64]).await.unwrap();
+        assert!(br.recv().await.is_err());
+    }
+
+    #[tokio::test]
     async fn send_rejects_oversized_message() {
         let (_, (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
         let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };

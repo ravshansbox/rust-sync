@@ -123,3 +123,103 @@ pub fn with_port(addr: &str) -> String {
         _ => format!("{addr}:{DEFAULT_PORT}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_port_adds_default_only_when_missing() {
+        assert_eq!(with_port("host"), format!("host:{DEFAULT_PORT}"));
+        assert_eq!(with_port("host:80"), "host:80");
+        assert_eq!(with_port("host:x"), format!("host:x:{DEFAULT_PORT}"));
+        assert_eq!(with_port("host:70000"), format!("host:70000:{DEFAULT_PORT}"));
+    }
+
+    #[test]
+    fn set_root_and_set_node_bump_the_clock() {
+        let mut c = Config::default();
+        c.set_root("me", "~/a", true, false);
+        c.set_node("me", "peer", "host:1", false);
+        assert_eq!(c.clock, 2);
+        assert_eq!(c.shared.roots["~/a"].stamp, Stamp(1, "me".into()));
+        assert_eq!(c.shared.nodes["peer"].stamp, Stamp(2, "me".into()));
+    }
+
+    #[test]
+    fn removed_entries_are_hidden() {
+        let mut c = Config::default();
+        c.set_root("me", "~/a", true, false);
+        c.set_root("me", "~/b", true, true);
+        c.set_node("me", "p1", "h:1", false);
+        c.set_node("me", "p2", "h:2", true);
+        let roots: Vec<_> = c.active_roots().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(roots, ["~/a"]);
+        assert_eq!(c.trusted("p1").unwrap().addr, "h:1");
+        assert!(c.trusted("p2").is_none());
+        assert!(c.trusted("p3").is_none());
+    }
+
+    #[test]
+    fn root_of_finds_the_containing_active_root() {
+        let mut c = Config::default();
+        c.set_root("me", "~/a", true, false);
+        c.set_root("me", "~/b", true, true);
+        assert_eq!(c.root_of("~/a"), Some("~/a"));
+        assert_eq!(c.root_of("~/a/x"), Some("~/a"));
+        assert_eq!(c.root_of("~/ab"), None);
+        assert_eq!(c.root_of("~/b/x"), None);
+    }
+
+    #[test]
+    fn merge_takes_higher_stamps_and_advances_the_clock() {
+        let mut ours = Config::default();
+        ours.set_root("me", "~/a", true, false);
+        let mut theirs = Config { clock: 5, ..Config::default() };
+        theirs.set_root("peer", "~/a", true, true);
+        theirs.set_root("peer", "~/b", false, false);
+        assert!(ours.merge(&theirs.shared, "me"));
+        assert!(ours.shared.roots["~/a"].removed);
+        assert!(!ours.shared.roots["~/b"].is_dir);
+        assert_eq!(ours.clock, 7);
+        assert!(!ours.merge(&theirs.shared, "me"));
+    }
+
+    #[test]
+    fn merge_keeps_ours_when_stamp_is_not_higher() {
+        let mut ours = Config { clock: 9, ..Config::default() };
+        ours.set_root("me", "~/a", true, false);
+        let mut theirs = Config::default();
+        theirs.set_root("peer", "~/a", true, true);
+        assert!(!ours.merge(&theirs.shared, "me"));
+        assert!(!ours.shared.roots["~/a"].removed);
+        assert_eq!(ours.clock, 10);
+    }
+
+    #[test]
+    fn merge_ignores_entries_about_ourselves() {
+        let mut ours = Config::default();
+        let mut theirs = Config { clock: 3, ..Config::default() };
+        theirs.set_node("peer", "me", "h:1", true);
+        assert!(!ours.merge(&theirs.shared, "me"));
+        assert!(ours.shared.nodes.is_empty());
+        assert_eq!(ours.clock, 4);
+    }
+
+    #[test]
+    fn load_missing_file_gives_default_and_save_round_trips() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-config-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let c = Config::load(&path).unwrap();
+        assert_eq!(c.port, DEFAULT_PORT);
+        let mut c = Config { port: 1234, ..c };
+        c.set_root("me", "~/a", true, false);
+        c.save(&path).unwrap();
+        let back = Config::load(&path).unwrap();
+        assert_eq!(back.port, 1234);
+        assert_eq!(back.clock, 1);
+        assert!(back.shared.roots.contains_key("~/a"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

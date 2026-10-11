@@ -1249,6 +1249,20 @@ mod tests {
     }
 
     #[test]
+    fn status_counts_only_live_files_in_shared_folders_and_queued_transfers() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_root(&me, "~/s", true, false);
+        d.index.insert("~/s/a".into(), meta(0, 0));
+        d.index.insert("~/s/b".into(), meta(0, 0));
+        d.index.insert("~/s/gone".into(), FileMeta { hash: None, ..meta(0, 0) });
+        d.index.insert("~/x".into(), meta(0, 0));
+        d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0)));
+        let text = d.on_ctl(Req::Status).text;
+        assert!(text.contains("\nFiles tracked: 2\nTransfers: 0 active, 1 queued\n"), "{text}");
+    }
+
+    #[test]
     fn unavailable_cancels_a_download_only_when_sent_by_its_source() {
         let mut d = daemon();
         let me = d.me.clone();

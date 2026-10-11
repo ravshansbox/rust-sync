@@ -491,8 +491,7 @@ impl Daemon {
     }
 
     fn rescan_all(&mut self) {
-        let roots: Vec<String> = self.active_roots().into_iter().collect();
-        for r in roots {
+        for r in self.active_roots() {
             self.check_tree(&r);
         }
     }

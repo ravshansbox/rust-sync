@@ -126,6 +126,22 @@ mod tests {
     }
 
     #[test]
+    fn rotation_replaces_an_older_rotated_file() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let dir = std::env::temp_dir().join(format!("rust-sync-log-replace-test-{}", std::process::id()));
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("test.log.1"), "older").unwrap();
+        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
+        to_file(path.clone()).unwrap();
+        line(format_args!("hello rotation"));
+        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE - 10);
+        assert!(!dir.join("test.log.1.1").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn line_keeps_file_when_next_line_reaches_max_size_exactly() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("rust-sync-log-limit-test-{}", std::process::id()));

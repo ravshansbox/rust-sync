@@ -271,6 +271,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handshake_fails_when_peer_sends_garbage_or_closes() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = async {
+            let (mut s, _) = listener.accept().await.unwrap();
+            read_frame(&mut s).await.unwrap();
+            write_frame(&mut s, b"not noise").await.unwrap();
+            let (s, _) = listener.accept().await.unwrap();
+            drop(s);
+        };
+        let keys = new_keys();
+        let client = async {
+            let garbage = handshake(TcpStream::connect(addr).await.unwrap(), &keys, true).await;
+            let closed = handshake(TcpStream::connect(addr).await.unwrap(), &keys, true).await;
+            (garbage.is_err(), closed.is_err())
+        };
+        let ((), errs) = tokio::join!(server, client);
+        assert_eq!(errs, (true, true));
+    }
+
+    #[tokio::test]
     async fn send_rejects_oversized_message() {
         let (_, (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
         let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };

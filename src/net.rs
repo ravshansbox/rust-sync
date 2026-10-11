@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn short_id_reads_first_eight_bytes() {
-        assert_eq!(short_id(ID), 0x0123456789abcdef);
+        assert_eq!(short_id(ID), 0x0123_4567_89ab_cdef);
     }
 
     #[tokio::test]

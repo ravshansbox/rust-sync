@@ -305,4 +305,18 @@ mod tests {
         assert!(stat(&dir.join("missing")).is_none());
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn hash_file_matches_blake3_across_buffer_boundary_and_fails_for_missing_file() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-hash-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f");
+        let data: Vec<u8> = (0..150_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&file, &data).unwrap();
+        assert_eq!(hash_file(&file).unwrap(), *blake3::hash(&data).as_bytes());
+        std::fs::write(&file, b"").unwrap();
+        assert_eq!(hash_file(&file).unwrap(), *blake3::hash(b"").as_bytes());
+        assert!(hash_file(&dir.join("missing")).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

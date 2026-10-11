@@ -377,7 +377,7 @@ impl Daemon {
             Msg::Config(shared) => self.on_config(&shared),
             Msg::Index(entries) => entries.into_iter().for_each(|e| self.on_entry(from, e)),
             Msg::Request { path, hash } => self.on_request(from, path, hash),
-            Msg::Data { path, offset, bytes, eof } => self.on_data(from, path, offset, &bytes, eof),
+            Msg::Data { path, offset, bytes, eof } => self.on_data(from, &path, offset, &bytes, eof),
             Msg::Unavailable { path } => {
                 if self.downloads.get(&path).is_some_and(|d| d.from == from) {
                     self.cancel_download(&path);
@@ -727,20 +727,20 @@ impl Daemon {
         }
     }
 
-    fn on_data(&mut self, from: &str, path: String, offset: u64, bytes: &[u8], eof: bool) {
-        let Some(d) = self.downloads.get_mut(&path) else { return };
+    fn on_data(&mut self, from: &str, path: &str, offset: u64, bytes: &[u8], eof: bool) {
+        let Some(d) = self.downloads.get_mut(path) else { return };
         if d.from != from {
             return;
         }
         if offset != d.written || d.file.write_all(bytes).is_err() {
-            return self.cancel_download(&path);
+            return self.cancel_download(path);
         }
         d.hasher.update(bytes);
         d.written += bytes.len() as u64;
         if !eof {
             return;
         }
-        let d = self.downloads.remove(&path).unwrap();
+        let d = self.downloads.remove(path).unwrap();
         if Some(*d.hasher.finalize().as_bytes()) != d.meta.hash {
             log!("{path} changed while being sent; will retry");
             let _ = std::fs::remove_file(&d.tmp);
@@ -750,9 +750,9 @@ impl Daemon {
         let _ = d.file.set_modified(when);
         let _ = d.file.set_permissions(std::fs::Permissions::from_mode(d.meta.mode));
         drop(d.file);
-        let Some(lp) = paths::to_local(&path) else { return };
-        self.check_file(&path, &lp);
-        self.apply(from, &path, &lp, d.meta, Some(d.tmp));
+        let Some(lp) = paths::to_local(path) else { return };
+        self.check_file(path, &lp);
+        self.apply(from, path, &lp, d.meta, Some(d.tmp));
     }
 
     fn cancel_download(&mut self, p: &str) {

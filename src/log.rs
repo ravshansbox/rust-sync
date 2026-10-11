@@ -121,4 +121,20 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "new\n");
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    #[test]
+    fn line_rotates_file_when_next_line_would_exceed_max_size() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-log-line-test-{}", std::process::id()));
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
+        to_file(path.clone()).unwrap();
+        line(format_args!("hello rotation"));
+        *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE - 10);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.ends_with(" hello rotation\n"));
+        assert!(text.len() < MAX_SIZE as usize / 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

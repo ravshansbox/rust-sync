@@ -1137,6 +1137,24 @@ mod tests {
     }
 
     #[test]
+    fn untrusted_node_trying_again_is_listed_with_its_new_address_and_kept_as_newest() {
+        let mut d = daemon();
+        let mut auth = |id: String, addr: String| {
+            d.handle(Event::Auth { id, addr: Some(addr), reply: oneshot::channel().0 });
+        };
+        for i in 0..MAX_PENDING {
+            auth(format!("{i:02}"), format!("h:{i}"));
+        }
+        auth("00".into(), "h:new".into());
+        auth("99".into(), "h:99".into());
+        let text = d.on_ctl(Req::ListNodes).text;
+        assert!(text.contains("  00  h:new\n"), "{text}");
+        assert!(!text.contains("  01  h:1\n"), "{text}");
+        assert!(text.contains("  99  h:99\n"), "{text}");
+        assert_eq!(text.matches("  h:").count(), MAX_PENDING);
+    }
+
+    #[test]
     fn trusted_node_is_accepted_and_not_listed_as_waiting() {
         let mut d = daemon();
         let me = d.me.clone();

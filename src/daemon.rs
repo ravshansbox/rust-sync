@@ -1197,6 +1197,21 @@ mod tests {
     }
 
     #[test]
+    fn messages_from_a_stale_connection_are_ignored() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        while rx.try_recv().is_ok() {}
+        let request = || Msg::Request { path: "~/x".into(), hash: [1; 32] };
+        d.handle(Event::Peer { id: "aa".into(), conn: 2, msg: request() });
+        assert!(rx.try_recv().is_err());
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: request() });
+        assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { .. })));
+    }
+
+    #[test]
     fn connected_node_gets_config_then_only_index_entries_in_shared_folders() {
         let mut d = daemon();
         let me = d.me.clone();

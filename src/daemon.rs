@@ -1133,6 +1133,13 @@ mod tests {
     }
 
     #[test]
+    fn batches_keeps_entries_that_reach_the_limit_exactly_together() {
+        let half = || entry("x".repeat(20_000 - 100), 0);
+        assert_eq!(batches(vec![half(), half()]).len(), 1);
+        assert_eq!(batches(vec![half(), half(), entry("y".into(), 0)]).len(), 2);
+    }
+
+    #[test]
     fn batches_gives_an_oversized_entry_its_own_batch() {
         let big = entry(format!("~/{}", "b".repeat(50_000)), 1);
         let out = batches(vec![entry("~/a".into(), 1), big, entry("~/c".into(), 1)]);

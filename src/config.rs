@@ -83,6 +83,10 @@ impl Config {
         self.shared.nodes.iter().filter(|(_, n)| !n.removed)
     }
 
+    pub fn active_root(&self, path: &str) -> Option<&RootEntry> {
+        self.shared.roots.get(path).filter(|r| !r.removed)
+    }
+
     pub fn trusted(&self, id: &str) -> Option<&NodeEntry> {
         self.shared.nodes.get(id).filter(|n| !n.removed)
     }
@@ -157,6 +161,9 @@ mod tests {
         c.set_node("me", "p2", "h:2", true);
         let roots: Vec<_> = c.active_roots().map(|(p, _)| p.as_str()).collect();
         assert_eq!(roots, ["~/a"]);
+        assert!(c.active_root("~/a").unwrap().is_dir);
+        assert!(c.active_root("~/b").is_none());
+        assert!(c.active_root("~/c").is_none());
         let nodes: Vec<_> = c.trusted_nodes().map(|(id, _)| id.as_str()).collect();
         assert_eq!(nodes, ["p1"]);
         assert_eq!(c.trusted("p1").unwrap().addr, "h:1");

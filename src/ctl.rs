@@ -74,7 +74,7 @@ pub fn apply(cfg: &mut Config, me: &str, req: &Req) -> Result<String, String> {
             Ok(format!("Now syncing {path}"))
         }
         Req::RemovePath { path } => {
-            let Some(is_dir) = cfg.shared.roots.get(path).filter(|r| !r.removed).map(|r| r.is_dir) else {
+            let Some(is_dir) = cfg.active_root(path).map(|r| r.is_dir) else {
                 return Err(format!("{path} is not synced"));
             };
             cfg.set_root(me, path, is_dir, true);

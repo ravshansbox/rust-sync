@@ -1137,6 +1137,18 @@ mod tests {
     }
 
     #[test]
+    fn trusted_node_is_accepted_and_not_listed_as_waiting() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let (reply, mut rx) = oneshot::channel();
+        d.handle(Event::Auth { id: "aa".into(), addr: Some("h:2".into()), reply });
+        assert!(rx.try_recv().unwrap());
+        let text = d.on_ctl(Req::ListNodes).text;
+        assert!(!text.contains("Waiting to be trusted"), "{text}");
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

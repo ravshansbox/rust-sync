@@ -42,15 +42,15 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { port: DEFAULT_PORT, clock: 0, shared: Shared::default() }
+        Self { port: DEFAULT_PORT, clock: 0, shared: Shared::default() }
     }
 }
 
 impl Config {
-    pub fn load(path: &Path) -> anyhow::Result<Config> {
+    pub fn load(path: &Path) -> anyhow::Result<Self> {
         match std::fs::read(path) {
             Ok(b) => Ok(serde_json::from_slice(&b)?),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }
     }

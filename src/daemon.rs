@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -903,7 +903,7 @@ async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::
     let addr = config::with_port(&addr);
     match timeout(DIAL_TIMEOUT, connect_any(&addr)).await {
         Ok(Ok(s)) => {
-            let ip = s.peer_addr().map_or(IpAddr::from([0u8; 4]), |a| a.ip().to_canonical());
+            let ip = s.peer_addr().map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |a| a.ip().to_canonical());
             connection(s, ip, Some(id.clone()), keys, tx.clone(), port).await;
         }
         Ok(Err(e)) if !quiet => {

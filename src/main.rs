@@ -172,7 +172,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             send(Req::RemoveNode { id: net::parse_id(&id).context("not a valid node ID")? }).await
         }
         Cmd::Service { cmd: ServiceCmd::Install { system } } => service::install(system).await,
-        Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall().await,
+        Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall(),
         Cmd::Service { cmd: ServiceCmd::Start } => service::start().await,
         Cmd::Service { cmd: ServiceCmd::Stop } => service::stop().await,
         Cmd::Service { cmd: ServiceCmd::Restart } => service::restart().await,

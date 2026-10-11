@@ -144,7 +144,7 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn uninstall() -> anyhow::Result<()> {
+pub fn uninstall() -> anyhow::Result<()> {
     let Some(mode) = installed_mode() else {
         outln!("Not installed.");
         return Ok(());

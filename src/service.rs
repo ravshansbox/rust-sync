@@ -329,11 +329,12 @@ fn plist_xml(mode: Mode, exe: &Path) -> anyhow::Result<String> {
     let exe = esc(&exe.to_string_lossy());
     let log = esc(&log_path().to_string_lossy());
     let mut vars = Vec::new();
-    let mut user = String::new();
-    if mode == Mode::System {
-        user = format!("  <key>UserName</key>\n  <string>{}</string>\n", esc(&user_name()?));
+    let user = if mode == Mode::System {
         vars.push(("HOME".to_string(), paths::home().to_string_lossy().into_owned()));
-    }
+        format!("  <key>UserName</key>\n  <string>{}</string>\n", esc(&user_name()?))
+    } else {
+        String::new()
+    };
     // Keep a custom state folder, if one is in use.
     if let Ok(dir) = std::env::var("RUST_SYNC_HOME") {
         vars.push(("RUST_SYNC_HOME".to_string(), dir));

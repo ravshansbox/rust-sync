@@ -414,10 +414,7 @@ impl Daemon {
             log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
-            let known: Vec<Entry> = index::under(&self.index, root)
-                .map(|(p, m)| Entry { path: p.clone(), meta: m.clone() })
-                .collect();
-            self.outbox.extend(known);
+            self.outbox.extend(index::under(&self.index, root).map(|(p, m)| Entry { path: p.clone(), meta: m.clone() }));
         }
         self.broadcast(&Msg::Config(self.cfg.shared.clone()));
         self.dial_all();

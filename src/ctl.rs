@@ -59,3 +59,22 @@ pub async fn call(req: &Req) -> anyhow::Result<Option<Resp>> {
     }
     Ok(Some(serde_json::from_str(&reply)?))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn socket_path_fits_unix_limit_and_is_stable() {
+        let p = socket_path().unwrap();
+        assert!(p.as_os_str().len() < 104);
+        assert_eq!(p, socket_path().unwrap());
+        let short = crate::paths::state_dir().join("ctl.sock");
+        if short.as_os_str().len() < 100 {
+            assert_eq!(p, short);
+        } else {
+            assert!(p.starts_with("/tmp"));
+            assert_eq!(p.extension().unwrap(), "sock");
+        }
+    }
+}

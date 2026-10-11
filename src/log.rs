@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_SIZE: u64 = 1024 * 1024;
@@ -25,13 +25,13 @@ pub fn to_file(path: PathBuf) -> std::io::Result<()> {
     }
     let file = OpenOptions::new().create(true).append(true).open(&path)?;
     let size = file.metadata()?.len();
-    *FILE.lock().unwrap_or_else(|e| e.into_inner()) = Some(LogFile { path, file, size });
+    *FILE.lock().unwrap_or_else(PoisonError::into_inner) = Some(LogFile { path, file, size });
     Ok(())
 }
 
 pub fn line(msg: std::fmt::Arguments) {
     let text = format!("{} {msg}\n", timestamp());
-    let mut file = FILE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut file = FILE.lock().unwrap_or_else(PoisonError::into_inner);
     match file.as_mut() {
         None => drop(std::io::stderr().write_all(text.as_bytes())),
         Some(f) => {

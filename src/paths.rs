@@ -107,16 +107,12 @@ mod tests {
         assert_eq!(to_local("~/./a"), None);
         assert_eq!(to_local("/a\0b"), None);
         assert_eq!(to_local("relative/path"), None);
+        assert_eq!(to_local("~other/x"), None);
     }
 
     #[test]
     fn to_local_accepts_names_made_of_dots() {
         assert_eq!(to_local("~/a..b/.c/..."), Some(home().join("a..b/.c/...")));
-    }
-
-    #[test]
-    fn to_local_rejects_another_users_home() {
-        assert_eq!(to_local("~other/x"), None);
     }
 
     #[test]

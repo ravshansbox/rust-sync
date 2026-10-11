@@ -1382,6 +1382,30 @@ mod tests {
     }
 
     #[test]
+    fn downloaded_conflict_winner_replaces_the_file_and_keeps_the_local_copy() {
+        let mut d = daemon();
+        let dir = std::env::temp_dir().join(format!("rust-sync-conflict-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        let tmp = dir.join("tmp");
+        std::fs::write(&lp, "mine").unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let mut r = meta(1, 2);
+        r.hash = Some([2; 32]);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp.clone()));
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
+        assert_eq!(std::fs::read_to_string(conflict_name(&lp, &local)).unwrap(), "mine");
+        assert!(!tmp.exists());
+        assert_eq!(d.index["~/s/f.txt"].hash, r.hash);
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

@@ -1234,6 +1234,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_rejects_a_peer_whose_id_is_not_the_one_dialled() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-conn-{}", std::process::id()));
+        let keys = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let other = net::load_or_create_keys(&dir.join("b")).unwrap();
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let server = async {
+            let (s, _) = l.accept().await.unwrap();
+            let _ = net::handshake(s, &other, false).await;
+        };
+        let dialled = "ab".repeat(32);
+        let s = TcpStream::connect(addr).await.unwrap();
+        let client = connection_inner(s, addr.ip(), Some(dialled.clone()), keys, tx, 0);
+        let ((), res) = tokio::join!(server, client);
+        let want = format!("expected node {} but found {}", net::pretty_id(&dialled), net::pretty_id(&other.id()));
+        assert_eq!(res.unwrap_err().to_string(), want);
+        assert!(rx.recv().await.is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
         let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
         let _ = std::fs::remove_file(&sock);

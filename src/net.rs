@@ -276,4 +276,15 @@ mod tests {
         let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };
         assert!(aw.send(&msg).await.is_err());
     }
+
+    #[tokio::test]
+    async fn send_delivers_full_chunk_with_long_path() {
+        let (a, b) = (new_keys(), new_keys());
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&a, &b).await;
+        let path = format!("~/{}", "p".repeat(4096));
+        let msg = Msg::Data { path: path.clone(), offset: u64::MAX, bytes: vec![9; CHUNK], eof: true };
+        aw.send(&msg).await.unwrap();
+        let got = br.recv().await.unwrap();
+        assert!(matches!(got, Msg::Data { path: p, bytes, .. } if p == path && bytes == vec![9; CHUNK]));
+    }
 }

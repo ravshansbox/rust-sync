@@ -1179,6 +1179,27 @@ mod tests {
         assert!(d.on_ctl(Req::ListNodes).text.contains("  offline"));
     }
 
+    #[tokio::test]
+    async fn going_down_cancels_only_the_downloads_from_that_node() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let mut tmps = Vec::new();
+        for (id, conn) in [("aa", 1), ("bb", 2)] {
+            d.cfg.set_node(&me, id, "h:1", false);
+            let ctl = mpsc::unbounded_channel().0;
+            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            let tmp = std::env::temp_dir().join(format!("rust-sync-down-{id}-{}", std::process::id()));
+            let file = File::create(&tmp).unwrap();
+            let dl = Download { from: id.into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            d.downloads.insert(format!("~/s/{id}"), dl);
+            tmps.push(tmp);
+        }
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        assert!(!tmps[0].exists());
+        assert!(tmps[1].exists());
+        d.cancel_download("~/s/bb");
+    }
+
     #[test]
     fn request_is_refused_outside_shared_folders_or_for_another_version() {
         let mut d = daemon();

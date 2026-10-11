@@ -329,4 +329,18 @@ mod tests {
         assert_eq!((a.id, a.yes), (None, false));
         assert!(Cli::try_parse_from(["rust-sync", "node", "add"]).is_err());
     }
+
+    #[test]
+    fn daemon_and_service_install_flags_parse() {
+        let cli = Cli::try_parse_from(["rust-sync", "daemon", "--port", "7000", "--log-file", "x.log"]).unwrap();
+        let Cmd::Daemon { port, log_file } = cli.cmd else { panic!() };
+        assert_eq!((port, log_file), (Some(7000), Some(PathBuf::from("x.log"))));
+        let Cmd::Daemon { port, log_file } = Cli::try_parse_from(["rust-sync", "daemon"]).unwrap().cmd else { panic!() };
+        assert_eq!((port, log_file), (None, None));
+        assert!(Cli::try_parse_from(["rust-sync", "daemon", "--port", "70000"]).is_err());
+        let cli = Cli::try_parse_from(["rust-sync", "service", "install", "--system"]).unwrap();
+        assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: true } }));
+        let cli = Cli::try_parse_from(["rust-sync", "service", "install"]).unwrap();
+        assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: false } }));
+    }
 }

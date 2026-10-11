@@ -748,7 +748,7 @@ impl Daemon {
             let _ = std::fs::remove_file(&d.tmp);
             return;
         }
-        let when = UNIX_EPOCH + Duration::from_nanos(d.meta.mtime.max(0) as u64);
+        let when = UNIX_EPOCH + Duration::from_nanos(d.meta.mtime.max(0).cast_unsigned());
         let _ = d.file.set_modified(when);
         let _ = d.file.set_permissions(std::fs::Permissions::from_mode(d.meta.mode));
         drop(d.file);

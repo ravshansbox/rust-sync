@@ -404,6 +404,12 @@ mod tests {
     }
 
     #[test]
+    fn agent_starts_at_login_and_system_at_boot() {
+        assert_eq!(Mode::Agent.when(), "login");
+        assert_eq!(Mode::System.when(), "boot");
+    }
+
+    #[test]
     fn system_plist() {
         let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync")).unwrap();
         assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user_name().unwrap())));

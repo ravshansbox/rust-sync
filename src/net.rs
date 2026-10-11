@@ -250,7 +250,7 @@ mod tests {
     async fn frames_round_trip_and_truncated_frame_fails() {
         let mut out = Vec::new();
         write_frame(&mut out, b"hi").await.unwrap();
-        write_frame(&mut out, &[7; MAX_FRAME]).await.unwrap();
+        write_frame(&mut out, &vec![7; MAX_FRAME]).await.unwrap();
         assert_eq!(&out[..4], [0, 2, b'h', b'i']);
         let mut r = &out[..];
         assert_eq!(read_frame(&mut r).await.unwrap(), b"hi");

@@ -1342,6 +1342,26 @@ mod tests {
     }
 
     #[test]
+    fn when_downloads_are_full_the_queue_keeps_the_newest_version() {
+        let mut d = daemon();
+        let tmp = std::env::temp_dir().join(format!("rust-sync-queue-{}", std::process::id()));
+        for n in 0..MAX_DOWNLOADS {
+            let file = File::create(&tmp).unwrap();
+            let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            d.downloads.insert(format!("~/s/{n}"), dl);
+        }
+        let queued = |d: &Daemon| d.queued.get("~/s/f").map(|(from, m)| (from.clone(), m.vv.clone()));
+        let mut r = meta(0, 0);
+        for (from, n, want) in [("aa", 2, ("aa", 2)), ("bb", 1, ("aa", 2)), ("bb", 2, ("bb", 2)), ("cc", 3, ("cc", 3))] {
+            r.vv = Vv(vec![(1, n)]);
+            d.start_download(from, "~/s/f", r.clone());
+            assert_eq!(queued(&d), Some((want.0.to_string(), Vv(vec![(1, want.1)]))));
+        }
+        assert_eq!(d.downloads.len(), MAX_DOWNLOADS);
+        std::fs::remove_file(tmp).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

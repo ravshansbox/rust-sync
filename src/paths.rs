@@ -117,4 +117,12 @@ mod tests {
         assert_eq!(to_portable(Path::new("/nonexistent-root/x")).as_deref(), Some("/nonexistent-root/x"));
         assert_eq!(to_local("/nonexistent-root/x"), Some(PathBuf::from("/nonexistent-root/x")));
     }
+
+    #[test]
+    fn to_portable_rejects_non_utf8_paths() {
+        use std::os::unix::ffi::OsStrExt;
+        let name = std::ffi::OsStr::from_bytes(b"bad\xff");
+        assert_eq!(to_portable(&home().join(name)), None);
+        assert_eq!(to_portable(&Path::new("/nonexistent-root").join(name)), None);
+    }
 }

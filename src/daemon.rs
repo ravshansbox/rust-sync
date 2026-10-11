@@ -1167,6 +1167,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn tick_pings_peers_and_dials_offline_nodes_not_waiting_to_retry() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        for id in ["aa", "bb", "cc"] {
+            d.cfg.set_node(&me, id, "127.0.0.1:1", false);
+        }
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        while rx.try_recv().is_ok() {}
+        d.backoff.insert("bb".into(), Duration::from_secs(1));
+        d.handle(Event::Tick);
+        assert!(matches!(rx.try_recv(), Ok(Msg::Ping)));
+        assert_eq!(d.dialling, HashSet::from(["cc".to_string()]));
+        d.handle(Event::Redial { id: "bb".into() });
+        assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
+    }
+
+    #[tokio::test]
     async fn only_the_current_connection_going_down_marks_the_node_offline() {
         let mut d = daemon();
         let me = d.me.clone();

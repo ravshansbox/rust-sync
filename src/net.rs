@@ -307,8 +307,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_delivers_full_chunk_with_long_path() {
-        let (a, b) = (new_keys(), new_keys());
-        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&a, &b).await;
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
         let path = format!("~/{}", "p".repeat(4096));
         let msg = Msg::Data { path: path.clone(), offset: u64::MAX, bytes: vec![9; CHUNK], eof: true };
         aw.send(&msg).await.unwrap();

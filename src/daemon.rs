@@ -1219,4 +1219,14 @@ mod tests {
         task.await.unwrap();
         assert!(out_rx.recv().await.is_none());
     }
+
+    #[tokio::test]
+    async fn connect_any_falls_back_to_an_address_that_listens_and_fails_when_none_does() {
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = l.local_addr().unwrap().port();
+        let s = connect_any(&format!("localhost:{port}")).await.unwrap();
+        assert_eq!(s.peer_addr().unwrap(), l.local_addr().unwrap());
+        drop((s, l));
+        assert!(connect_any(&format!("127.0.0.1:{port}")).await.is_err());
+    }
 }

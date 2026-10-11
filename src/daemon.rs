@@ -1507,6 +1507,30 @@ mod tests {
     }
 
     #[test]
+    fn remote_entries_outside_roots_or_for_ignored_names_are_skipped_and_unseen_local_changes_count() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = std::env::temp_dir().join(format!("rust-sync-entry-{}", std::process::id()));
+        let root = dir.join("in");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        d.cfg.set_root(&me, root.to_str().unwrap(), true, false);
+        let mut gone = meta(0, 2);
+        gone.hash = None;
+        gone.vv = Vv(vec![(2, 1)]);
+        for lp in [dir.join("out/f.txt"), root.join(".DS_Store"), root.join("f.txt")] {
+            std::fs::write(&lp, "x").unwrap();
+            d.on_entry("aa", Entry { path: lp.to_str().unwrap().into(), meta: gone.clone() });
+            assert!(lp.exists(), "{}", lp.display());
+        }
+        let p = root.join("f.txt").to_str().unwrap().to_string();
+        assert_eq!(d.index.keys().collect::<Vec<_>>(), [&p]);
+        assert_eq!(d.index[&p].vv, Vv(vec![(d.me_short, 1)]));
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

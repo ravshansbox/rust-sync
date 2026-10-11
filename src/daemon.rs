@@ -1531,6 +1531,30 @@ mod tests {
     }
 
     #[test]
+    fn tree_check_records_nested_files_skips_ignored_names_and_marks_missing_files_deleted() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = std::env::temp_dir().join(format!("rust-sync-tree-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        let root = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &root, true, false);
+        for name in ["sub/a.txt", ".DS_Store", "b.rsync-tmp"] {
+            std::fs::write(dir.join(name), "x").unwrap();
+        }
+        let gone = dir.join("gone.txt").to_str().unwrap().to_string();
+        d.index.insert(gone.clone(), meta(0, 2));
+        d.check_tree(&root);
+        let a = dir.join("sub/a.txt").to_str().unwrap().to_string();
+        let mut keys: Vec<_> = d.index.keys().cloned().collect();
+        keys.sort();
+        assert_eq!(keys, [gone.clone(), a.clone()]);
+        assert!(!d.index[&a].deleted());
+        assert!(d.index[&gone].deleted());
+        assert_eq!(d.outbox.len(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

@@ -1286,6 +1286,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn trusted_connection_comes_up_carries_messages_and_goes_down() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-up-{}", std::process::id()));
+        let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (a_tx, mut a_rx) = mpsc::unbounded_channel();
+        let (b_tx, mut b_rx) = mpsc::unbounded_channel();
+        let dialler = async {
+            let s = TcpStream::connect(addr).await.unwrap();
+            connection_inner(s, addr.ip(), Some(b.id()), a.clone(), a_tx, 4000).await
+        };
+        let listener = async {
+            let (s, peer) = l.accept().await.unwrap();
+            connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
+        };
+        let a_side = async {
+            let Some(Event::Auth { reply, .. }) = a_rx.recv().await else { panic!() };
+            reply.send(true).unwrap();
+            let Some(Event::Up { id, conn, outbound: true, ctl, .. }) = a_rx.recv().await else { panic!() };
+            assert_eq!(id, b.id());
+            ctl.send(Msg::Unavailable { path: "x".into() }).unwrap();
+            drop(ctl);
+            let Some(Event::Down { id, conn: down }) = a_rx.recv().await else { panic!() };
+            assert_eq!((id, down), (b.id(), conn));
+            assert!(a_rx.recv().await.is_none());
+        };
+        let b_side = async {
+            let Some(Event::Auth { reply, .. }) = b_rx.recv().await else { panic!() };
+            reply.send(true).unwrap();
+            let Some(Event::Up { id, conn, outbound: false, ctl: _ctl, .. }) = b_rx.recv().await else { panic!() };
+            assert_eq!(id, a.id());
+            let Some(Event::Peer { conn: from, msg: Msg::Unavailable { path }, .. }) = b_rx.recv().await else { panic!() };
+            assert_eq!((from, path.as_str()), (conn, "x"));
+            let Some(Event::Down { id, conn: down }) = b_rx.recv().await else { panic!() };
+            assert_eq!((id, down), (a.id(), conn));
+            assert!(b_rx.recv().await.is_none());
+        };
+        let (a_res, b_res, (), ()) = tokio::join!(dialler, listener, a_side, b_side);
+        a_res.unwrap();
+        assert!(b_res.is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
         let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
         let _ = std::fs::remove_file(&sock);

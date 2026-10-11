@@ -134,6 +134,10 @@ pub fn with_port(addr: &str) -> String {
 mod tests {
     use super::*;
 
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
+    }
+
     #[test]
     fn with_port_adds_default_only_when_missing() {
         assert_eq!(with_port("host"), format!("host:{DEFAULT_PORT}"));
@@ -239,7 +243,7 @@ mod tests {
 
     #[test]
     fn load_missing_file_gives_default_damaged_file_fails_and_save_round_trips() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-config-{}", std::process::id()));
+        let dir = test_dir("config");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         let c = Config::load(&path).unwrap();
@@ -258,7 +262,7 @@ mod tests {
 
     #[test]
     fn save_replaces_an_existing_file_and_leaves_no_temp_file() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-config-save-{}", std::process::id()));
+        let dir = test_dir("config-save");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
         Config { port: 1, ..Config::default() }.save(&path).unwrap();
@@ -270,7 +274,7 @@ mod tests {
 
     #[test]
     fn load_fails_when_the_file_cannot_be_read() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-config-unreadable-{}", std::process::id()));
+        let dir = test_dir("config-unreadable");
         std::fs::create_dir_all(&dir).unwrap();
         assert!(Config::load(&dir).is_err());
         std::fs::remove_dir_all(&dir).unwrap();

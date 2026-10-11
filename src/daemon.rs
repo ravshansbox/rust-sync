@@ -1406,6 +1406,26 @@ mod tests {
     }
 
     #[test]
+    fn newer_remote_deletion_removes_the_local_file() {
+        let mut d = daemon();
+        let dir = std::env::temp_dir().join(format!("rust-sync-delete-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        std::fs::write(&lp, "mine").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local);
+        let mut r = meta(1, 1);
+        r.hash = None;
+        r.vv = Vv(vec![(1, 2)]);
+        d.apply("aa", "~/s/f.txt", &lp, r, None);
+        assert!(!lp.exists());
+        assert!(d.index["~/s/f.txt"].deleted());
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

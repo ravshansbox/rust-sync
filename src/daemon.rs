@@ -976,7 +976,7 @@ async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
                 Ok(Err(e)) => last_err = e,
                 Err(e) => last_err = std::io::Error::other(e),
             },
-            _ = tokio::time::sleep(ATTEMPT_DELAY), if next.len() > 0 => {}
+            () = tokio::time::sleep(ATTEMPT_DELAY), if next.len() > 0 => {}
         }
     }
 }

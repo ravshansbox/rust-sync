@@ -303,6 +303,20 @@ mod tests {
     }
 
     #[test]
+    fn path_add_and_commands_without_arguments_parse() {
+        let parse = |args: &[&str]| Cli::try_parse_from(std::iter::once("rust-sync").chain(args.iter().copied()));
+        let Cmd::Path { cmd: PathCmd::Add { path } } = parse(&["path", "add", "a"]).unwrap().cmd else { panic!() };
+        assert_eq!(path, PathBuf::from("a"));
+        assert!(parse(&["path", "add"]).is_err());
+        assert!(matches!(parse(&["id"]).unwrap().cmd, Cmd::Id));
+        assert!(matches!(parse(&["status"]).unwrap().cmd, Cmd::Status));
+        assert!(matches!(parse(&["service", "uninstall"]).unwrap().cmd, Cmd::Service { cmd: ServiceCmd::Uninstall }));
+        assert!(matches!(parse(&["service", "start"]).unwrap().cmd, Cmd::Service { cmd: ServiceCmd::Start }));
+        assert!(matches!(parse(&["service", "stop"]).unwrap().cmd, Cmd::Service { cmd: ServiceCmd::Stop }));
+        assert!(matches!(parse(&["service", "restart"]).unwrap().cmd, Cmd::Service { cmd: ServiceCmd::Restart }));
+    }
+
+    #[test]
     fn node_add_flags_parse() {
         let cli = Cli::try_parse_from(["rust-sync", "node", "add", "host:1", "--id", "ab", "-y"]).unwrap();
         let Cmd::Node { cmd: NodeCmd::Add(a) } = cli.cmd else { panic!() };

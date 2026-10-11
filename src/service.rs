@@ -120,15 +120,12 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     let plist = mode.plist();
     std::fs::create_dir_all(log_path().parent().unwrap())?;
     write_plist(mode, &plist_xml(mode, &exe)?)?;
-    let plist_str = plist.to_str().context("path is not valid UTF-8")?;
-    let domain = mode.domain()?;
-    let args = ["bootstrap", &domain, plist_str];
-    if launchctl(mode, &args).is_err() {
+    if bootstrap(mode).is_err() {
         // launchd sometimes refuses with "5: Input/output error", for example while a
         // job with the same label is still unloading. Clear it and try once more.
         unload(mode)?;
         std::thread::sleep(Duration::from_secs(1));
-        launchctl(mode, &args)?;
+        bootstrap(mode)?;
     }
 
     outln!("Installed. rust-sync now starts at {}, and it is running now.", mode.when());
@@ -226,13 +223,17 @@ async fn start_now(mode: Mode) -> anyhow::Result<()> {
         launchctl(mode, &["kickstart", &mode.target()?])?;
     } else {
         // Not loaded, for example after `launchctl bootout`. Loading it starts it (`RunAtLoad`).
-        let plist = mode.plist();
-        launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])?;
+        bootstrap(mode)?;
     }
     if !wait_for(true).await? {
         bail!("did not start. See the log: {}", log_path().display());
     }
     Ok(())
+}
+
+fn bootstrap(mode: Mode) -> anyhow::Result<()> {
+    let plist = mode.plist();
+    launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])
 }
 
 /// Whether launchd has the job loaded (whether or not it is running).

@@ -287,4 +287,22 @@ mod tests {
         assert_eq!(nanos(UNIX_EPOCH + d), 3_000_000_005);
         assert_eq!(nanos(UNIX_EPOCH - d), -3_000_000_005);
     }
+
+    #[test]
+    fn stat_reports_regular_files_only() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-stat-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f");
+        std::fs::write(&file, b"hello").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o640)).unwrap();
+        let link = dir.join("l");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        let s = stat(&file).unwrap();
+        assert_eq!((s.size, s.mode), (5, 0o640));
+        assert_eq!(s.mtime, nanos(std::fs::metadata(&file).unwrap().modified().unwrap()));
+        assert!(stat(&dir).is_none());
+        assert!(stat(&link).is_none());
+        assert!(stat(&dir.join("missing")).is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

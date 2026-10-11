@@ -238,6 +238,9 @@ mod tests {
         let l = meta(Some(1), 5, 1, vv(&[(1, 1)]));
         let r = meta(Some(1), 9, 2, vv(&[(2, 1)]));
         assert_eq!(decide(Some(&l), &r), Action::Same);
+        let l = meta(None, 5, 1, vv(&[(1, 1)]));
+        let r = meta(None, 9, 2, vv(&[(2, 1)]));
+        assert_eq!(decide(Some(&l), &r), Action::Same);
     }
 
     #[test]

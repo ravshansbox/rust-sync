@@ -372,3 +372,40 @@ fn plist_xml(mode: Mode, exe: &Path) -> anyhow::Result<String> {
 "#
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mode_names() {
+        assert_eq!(Mode::Agent.when(), "login");
+        assert_eq!(Mode::System.when(), "boot");
+        assert_eq!(Mode::System.target().unwrap(), format!("system/{LABEL}"));
+        assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{}/{LABEL}", uid().unwrap()));
+        assert_eq!(Mode::System.plist(), PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")));
+        assert_eq!(Mode::Agent.plist(), paths::home().join(format!("Library/LaunchAgents/{LABEL}.plist")));
+    }
+
+    #[test]
+    fn agent_plist() {
+        let xml = plist_xml(Mode::Agent, Path::new("/opt/a&b/<rust-sync>")).unwrap();
+        assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"));
+        assert!(xml.contains(&format!("<key>Label</key>\n  <string>{LABEL}</string>\n")));
+        assert!(xml.contains("<string>/opt/a&amp;b/&lt;rust-sync&gt;</string>\n    <string>daemon</string>"));
+        assert!(xml.contains(&format!("<string>--log-file</string>\n    <string>{}</string>", log_path().display())));
+        assert!(!xml.contains("UserName"));
+        assert!(!xml.contains("<key>HOME</key>"));
+        assert_eq!(xml.contains("<key>RUST_SYNC_HOME</key>"), std::env::var("RUST_SYNC_HOME").is_ok());
+        assert!(xml.contains("<key>SuccessfulExit</key>\n    <false/>"));
+        assert!(xml.ends_with("</plist>\n"));
+    }
+
+    #[test]
+    fn system_plist() {
+        let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync")).unwrap();
+        assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user_name().unwrap())));
+        assert!(xml.contains("<key>EnvironmentVariables</key>\n  <dict>\n"));
+        assert!(xml.contains(&format!("<key>HOME</key>\n    <string>{}</string>", paths::home().display())));
+    }
+}

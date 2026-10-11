@@ -190,10 +190,11 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
 fn write_stdout(args: std::fmt::Arguments) {
     let mut stdout = std::io::stdout().lock();
     if let Err(e) = stdout.write_fmt(args).and_then(|()| stdout.flush()) {
-        if e.kind() != std::io::ErrorKind::BrokenPipe {
-            eprintln!("error: cannot write output: {e}");
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            std::process::exit(0);
         }
-        std::process::exit(if e.kind() == std::io::ErrorKind::BrokenPipe { 0 } else { 1 });
+        eprintln!("error: cannot write output: {e}");
+        std::process::exit(1);
     }
 }
 

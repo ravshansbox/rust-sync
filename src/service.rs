@@ -393,6 +393,15 @@ mod tests {
     }
 
     #[test]
+    fn launchd_targets_and_plist_paths() {
+        let uid = std::fs::metadata(paths::home()).unwrap().uid();
+        assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{uid}/{LABEL}"));
+        assert_eq!(Mode::System.target().unwrap(), format!("system/{LABEL}"));
+        assert_eq!(Mode::Agent.plist(), paths::home().join(format!("Library/LaunchAgents/{LABEL}.plist")));
+        assert_eq!(Mode::System.plist(), PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")));
+    }
+
+    #[test]
     fn system_plist() {
         let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync")).unwrap();
         assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user_name().unwrap())));

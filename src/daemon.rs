@@ -395,11 +395,11 @@ impl Daemon {
     fn on_config(&mut self, shared: &Shared) {
         let before = self.active_roots();
         if self.cfg.merge(shared, &self.me) {
-            self.config_changed(before);
+            self.config_changed(&before);
         }
     }
 
-    fn config_changed(&mut self, before: HashSet<String>) {
+    fn config_changed(&mut self, before: &HashSet<String>) {
         if let Err(e) = self.cfg.save(&paths::state_dir().join("config.json")) {
             log!("cannot save config: {e}");
         }
@@ -409,7 +409,7 @@ impl Daemon {
             self.drop_downloads_from(&id);
         }
         self.reconcile_watches();
-        for root in self.active_roots().difference(&before) {
+        for root in self.active_roots().difference(before) {
             log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
@@ -457,7 +457,7 @@ impl Daemon {
                 format!("Removed node {}", net::pretty_id(&id))
             }
         };
-        self.config_changed(before);
+        self.config_changed(&before);
         Resp { ok: true, text }
     }
 

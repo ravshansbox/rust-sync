@@ -158,7 +158,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
         }
         Cmd::Path { cmd: PathCmd::List } => {
             // The daemon saves every change to the config file, so this is current either way.
-            out!("{}", daemon::paths_text(&Config::load(&config_path())?));
+            out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
             Ok(())
         }
         Cmd::Path { cmd: PathCmd::Remove { path } } => {
@@ -203,10 +203,6 @@ fn my_keys() -> anyhow::Result<net::Keys> {
     net::load_or_create_keys(paths::state_dir())
 }
 
-fn config_path() -> PathBuf {
-    paths::state_dir().join("config.json")
-}
-
 /// Send a change to the running daemon. If none is running, edit the config file.
 async fn send(req: Req) -> anyhow::Result<()> {
     if let Some(resp) = ctl::call(&req).await? {
@@ -217,7 +213,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
         return Ok(());
     }
     let me = my_keys()?.id();
-    let mut cfg = Config::load(&config_path())?;
+    let mut cfg = Config::load(&paths::config_file())?;
     let text = match req {
         Req::Status => {
             out!("{}", daemon::status_text(&cfg, &me, |_| None, &BTreeMap::default()));
@@ -248,7 +244,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
             format!("Removed node {}", net::pretty_id(&id))
         }
     };
-    cfg.save(&config_path())?;
+    cfg.save(&paths::config_file())?;
     outln!("{text}\n(The daemon is not running. This takes effect when it starts.)");
     Ok(())
 }
@@ -256,7 +252,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
 /// Connect to the node, show its ID, and trust it once the user confirms.
 async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     let keys = my_keys()?;
-    let cfg = Config::load(&config_path())?;
+    let cfg = Config::load(&paths::config_file())?;
     let addr = config::with_port(&a.addr);
     let expected = a.id.as_deref().map(|s| net::parse_id(s).context("not a valid node ID")).transpose()?;
 

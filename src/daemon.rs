@@ -127,11 +127,11 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         bail!("a daemon is already running for {}", dir.display());
     }
     let keys = Arc::new(net::load_or_create_keys(dir)?);
-    let mut cfg = Config::load(&dir.join("config.json"))?;
+    let mut cfg = Config::load(&paths::config_file())?;
     if let Some(p) = port {
         cfg.port = p;
     }
-    cfg.save(&dir.join("config.json"))?;
+    cfg.save(&paths::config_file())?;
     let (tx, mut rx) = mpsc::unbounded_channel();
 
     // File watcher. It runs on its own thread and hands raw paths to `debounce`.
@@ -401,7 +401,7 @@ impl Daemon {
     }
 
     fn config_changed(&mut self, before: &HashSet<String>) {
-        if let Err(e) = self.cfg.save(&paths::state_dir().join("config.json")) {
+        if let Err(e) = self.cfg.save(&paths::config_file()) {
             log!("cannot save config: {e}");
         }
         let gone: Vec<String> = self.peers.keys().filter(|id| self.cfg.trusted(id).is_none()).cloned().collect();

@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -136,16 +135,9 @@ pub fn now() -> i64 {
 }
 
 pub fn hash_file(p: &Path) -> std::io::Result<[u8; 32]> {
-    let mut f = std::fs::File::open(p)?;
     let mut h = blake3::Hasher::new();
-    let mut buf = vec![0u8; 64 * 1024];
-    loop {
-        let n = f.read(&mut buf)?;
-        if n == 0 {
-            return Ok(*h.finalize().as_bytes());
-        }
-        h.update(&buf[..n]);
-    }
+    h.update_reader(std::fs::File::open(p)?)?;
+    Ok(*h.finalize().as_bytes())
 }
 
 #[derive(Debug, PartialEq, Eq)]

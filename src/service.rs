@@ -117,7 +117,6 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     if running().await? {
         bail!("a daemon is already running. Stop it first (Ctrl-C where it runs), then run this again.");
     }
-    let plist = mode.plist();
     std::fs::create_dir_all(log_path().parent().unwrap())?;
     write_plist(mode, &plist_xml(mode, &exe)?)?;
     if bootstrap(mode).is_err() {
@@ -129,7 +128,7 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     }
 
     outln!("Installed. rust-sync now starts at {}, and it is running now.", mode.when());
-    outln!("  Launcher: {}", plist.display());
+    outln!("  Launcher: {}", mode.plist().display());
     outln!("  Log:      {}", log_path().display());
     outln!("  Binary:   {}", exe.display());
     if exe.components().any(|c| c.as_os_str() == "target") {

@@ -58,9 +58,17 @@ pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
     }
     let keys = generate_keys()?;
     std::fs::create_dir_all(dir)?;
-    std::fs::write(&path, [keys.private.as_slice(), keys.public.as_slice()].concat())?;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    Ok(keys)
+    // Another process may be creating a key now. Linking fails if one exists, so all use the same key.
+    let tmp = dir.join(format!("key.{}.tmp", hex(&keys.public[..8])));
+    std::fs::write(&tmp, [keys.private.as_slice(), keys.public.as_slice()].concat())?;
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    let linked = std::fs::hard_link(&tmp, &path);
+    std::fs::remove_file(&tmp)?;
+    match linked {
+        Ok(()) => Ok(keys),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => load_or_create_keys(dir),
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn generate_keys() -> anyhow::Result<Keys> {
@@ -241,6 +249,21 @@ mod tests {
         assert!(load_or_create_keys(&dir).is_err());
         std::fs::write(&path, [0u8; 65]).unwrap();
         assert!(load_or_create_keys(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn keys_created_at_the_same_time_are_the_same_key() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-keys-race-{}", std::process::id()));
+        for _ in 0..20 {
+            let _ = std::fs::remove_dir_all(&dir);
+            let ids: Vec<String> = std::thread::scope(|s| {
+                let handles: Vec<_> = (0..8).map(|_| s.spawn(|| load_or_create_keys(&dir).unwrap().id())).collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            assert!(ids.iter().all(|id| *id == ids[0]), "{ids:?}");
+            assert_eq!(load_or_create_keys(&dir).unwrap().id(), ids[0]);
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

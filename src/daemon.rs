@@ -315,10 +315,10 @@ impl Daemon {
         self.pending_order.retain(|x| *x != id);
         self.pending_order.push_back(id.clone());
         self.pending.insert(id, addr);
-        while self.pending_order.len() > MAX_PENDING {
-            if let Some(oldest) = self.pending_order.pop_front() {
-                self.pending.remove(&oldest);
-            }
+        while self.pending_order.len() > MAX_PENDING
+            && let Some(oldest) = self.pending_order.pop_front()
+        {
+            self.pending.remove(&oldest);
         }
     }
 

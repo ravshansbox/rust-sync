@@ -1651,6 +1651,25 @@ mod tests {
     }
 
     #[test]
+    fn local_permission_change_is_a_new_version() {
+        let mut d = daemon();
+        let me = d.me_short;
+        let dir = test_dir("chmod");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.sh");
+        let p = "~/s/f.sh";
+        std::fs::write(&lp, "x").unwrap();
+        std::fs::set_permissions(&lp, std::fs::Permissions::from_mode(0o644)).unwrap();
+        d.check_file(p, &lp);
+        std::fs::set_permissions(&lp, std::fs::Permissions::from_mode(0o755)).unwrap();
+        d.check_file(p, &lp);
+        assert_eq!(d.index[p].vv, Vv(vec![(me, 2)]));
+        assert_eq!(d.index[p].mode, 0o755);
+        assert_eq!(d.outbox.len(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn remote_entries_outside_roots_or_for_ignored_names_are_skipped_and_unseen_local_changes_count() {
         let mut d = daemon();
         let me = d.me.clone();

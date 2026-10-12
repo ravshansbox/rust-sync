@@ -60,7 +60,7 @@ others learn about C from that machine and connect to it by themselves.
 
 | Command | Alias | What it does |
 |---|---|---|
-| `rust-sync daemon [--port N]` | | Run the sync process (default port 21987) |
+| `rust-sync daemon [--port N] [--log-file <path>]` | | Run the sync process (default port 21987) |
 | `rust-sync path add <path>` | | Start syncing a file or folder |
 | `rust-sync path list` | `path ls` | Synced files and folders |
 | `rust-sync path remove <path>` | `path rm` | Stop syncing it. Files stay on disk |

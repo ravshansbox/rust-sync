@@ -1179,6 +1179,17 @@ mod tests {
     }
 
     #[test]
+    fn connection_from_a_node_removed_after_auth_is_not_used() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        d.cfg.set_node(&me, "aa", "h:1", true);
+        let mut rx = up(&mut d, "aa", 1);
+        assert!(rx.try_recv().is_err());
+        assert!(d.peers.is_empty());
+    }
+
+    #[test]
     fn duplicate_connection_is_kept_only_if_dialled_by_the_lower_id() {
         let mut d = daemon();
         let me = d.me.clone();

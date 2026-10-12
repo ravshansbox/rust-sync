@@ -795,19 +795,17 @@ pub fn nodes_text(
     if nodes.is_empty() {
         s.push_str("  (none) add one with `rust-sync node add <host>`\n");
     }
-    for (id, n) in nodes {
+    s.extend(nodes.into_iter().map(|(id, n)| {
         let state = match connected(id) {
             Some(true) => "connected",
             Some(false) => "offline",
             None => "",
         };
-        let _ = writeln!(s, "  {}  {}  {state}", net::pretty_id(id), n.addr);
-    }
+        format!("  {}  {}  {state}\n", net::pretty_id(id), n.addr)
+    }));
     if !pending.is_empty() {
         s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");
-        for (id, addr) in pending {
-            let _ = writeln!(s, "  {}  {addr}", net::pretty_id(id));
-        }
+        s.extend(pending.iter().map(|(id, addr)| format!("  {}  {addr}\n", net::pretty_id(id))));
     }
     s
 }

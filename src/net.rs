@@ -57,10 +57,15 @@ pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
         }
         bail!("{} is damaged", path.display());
     }
-    let kp = Builder::new(PARAMS.parse()?).generate_keypair()?;
+    let keys = generate_keys()?;
     std::fs::create_dir_all(dir)?;
-    std::fs::write(&path, [kp.private.as_slice(), kp.public.as_slice()].concat())?;
+    std::fs::write(&path, [keys.private.as_slice(), keys.public.as_slice()].concat())?;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    Ok(keys)
+}
+
+fn generate_keys() -> anyhow::Result<Keys> {
+    let kp = Builder::new(PARAMS.parse()?).generate_keypair()?;
     Ok(Keys { private: kp.private, public: kp.public })
 }
 
@@ -182,11 +187,6 @@ mod tests {
 
     const ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    fn new_keys() -> Keys {
-        let kp = Builder::new(PARAMS.parse().unwrap()).generate_keypair().unwrap();
-        Keys { private: kp.private, public: kp.public }
-    }
-
     async fn connect(a: &Keys, b: &Keys) -> ((Reader, Writer, String), (Reader, Writer, String)) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -263,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_exchanges_ids_and_messages() {
-        let (a, b) = (new_keys(), new_keys());
+        let (a, b) = (generate_keys().unwrap(), generate_keys().unwrap());
         let ((mut br, _bw, b_sees), (_ar, mut aw, a_sees)) = connect(&a, &b).await;
         assert_eq!(b_sees, a.id());
         assert_eq!(a_sees, b.id());
@@ -282,7 +282,7 @@ mod tests {
             let (s, _) = listener.accept().await.unwrap();
             drop(s);
         };
-        let keys = new_keys();
+        let keys = generate_keys().unwrap();
         let client = async {
             let garbage = handshake(TcpStream::connect(addr).await.unwrap(), &keys, true).await;
             let closed = handshake(TcpStream::connect(addr).await.unwrap(), &keys, true).await;
@@ -294,21 +294,21 @@ mod tests {
 
     #[tokio::test]
     async fn recv_rejects_frame_not_encrypted_by_peer() {
-        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
         write_frame(&mut aw.w, &[0; 64]).await.unwrap();
         assert!(br.recv().await.is_err());
     }
 
     #[tokio::test]
     async fn send_rejects_oversized_message() {
-        let (_, (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
+        let (_, (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
         let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };
         assert!(aw.send(&msg).await.is_err());
     }
 
     #[tokio::test]
     async fn send_delivers_full_chunk_with_long_path() {
-        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&new_keys(), &new_keys()).await;
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
         let path = format!("~/{}", "p".repeat(4096));
         let msg = Msg::Data { path: path.clone(), offset: u64::MAX, bytes: vec![9; CHUNK], eof: true };
         aw.send(&msg).await.unwrap();

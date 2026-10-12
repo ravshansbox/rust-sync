@@ -354,6 +354,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn node_remove_rejects_invalid_id() {
+        let remove = |id: &str| run(Cmd::Node { cmd: NodeCmd::Remove { id: id.into() } });
+        assert_eq!(remove("not-an-id").await.unwrap_err().to_string(), "not a valid node ID");
+        assert_eq!(remove(&"a".repeat(63)).await.unwrap_err().to_string(), "not a valid node ID");
+    }
+
+    #[tokio::test]
     async fn send_without_daemon_saves_change_to_config_file() {
         send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
         let cfg = Config::load(&paths::config_file()).unwrap();

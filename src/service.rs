@@ -411,7 +411,8 @@ mod tests {
     #[test]
     fn system_plist() {
         let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync")).unwrap();
-        assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user_name().unwrap())));
+        let user = String::from_utf8(Command::new("whoami").output().unwrap().stdout).unwrap();
+        assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user.trim())));
         assert!(!xml.contains("\n</string>"));
         assert!(xml.contains("<key>EnvironmentVariables</key>\n  <dict>\n"));
         assert!(xml.contains(&format!("<key>HOME</key>\n    <string>{}</string>", paths::home().display())));

@@ -314,6 +314,18 @@ mod tests {
     }
 
     #[test]
+    fn stat_drops_setuid_setgid_and_sticky_bits() {
+        let dir = test_dir("stat-special");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f");
+        std::fs::write(&file, b"x").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o7755)).unwrap();
+        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o7777, 0o7755);
+        assert_eq!(stat(&file).unwrap().mode, 0o755);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn hash_file_matches_blake3_across_buffer_boundary_and_fails_for_missing_file() {
         let dir = test_dir("hash");
         std::fs::create_dir_all(&dir).unwrap();

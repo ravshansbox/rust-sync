@@ -1274,8 +1274,7 @@ mod tests {
             let ctl = mpsc::unbounded_channel().0;
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
             let tmp = test_dir(&format!("down-{id}"));
-            let dl = download(id, meta(0, 0), &tmp);
-            d.downloads.insert(format!("~/s/{id}"), dl);
+            d.downloads.insert(format!("~/s/{id}"), download(id, meta(0, 0), &tmp));
             tmps.push(tmp);
         }
         d.handle(Event::Down { id: "aa".into(), conn: 1 });
@@ -1423,8 +1422,7 @@ mod tests {
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
         let tmp = test_dir("unavailable");
-        let dl = download("aa", meta(0, 0), &tmp);
-        d.downloads.insert("~/s/f".into(), dl);
+        d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: Msg::Unavailable { path: "~/s/f".into() } });
         assert!(tmp.exists());
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Unavailable { path: "~/s/f".into() } });
@@ -1441,8 +1439,7 @@ mod tests {
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
         let tmp = test_dir("data");
-        let dl = download("aa", meta(0, 0), &tmp);
-        d.downloads.insert("~/s/f".into(), dl);
+        d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
         let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), offset, bytes: bytes.to_vec(), eof: false };
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: data(0, b"xx") });
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(0, b"abc") });
@@ -1459,8 +1456,7 @@ mod tests {
         let ctl = mpsc::unbounded_channel().0;
         d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
         let tmp = test_dir("mismatch");
-        let dl = download("aa", meta(0, 0), &tmp);
-        d.downloads.insert("~/s/f".into(), dl);
+        d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
         let msg = Msg::Data { path: "~/s/f".into(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(d.downloads.is_empty());
@@ -1473,8 +1469,7 @@ mod tests {
         let tmp = test_dir("replace");
         let mut running = meta(0, 0);
         running.vv = Vv(vec![(1, 2)]);
-        let dl = download("aa", running, &tmp);
-        d.downloads.insert("~/s/f".into(), dl);
+        d.downloads.insert("~/s/f".into(), download("aa", running, &tmp));
         let mut r = meta(0, 0);
         for n in [1, 2] {
             r.vv = Vv(vec![(1, n)]);
@@ -1493,8 +1488,7 @@ mod tests {
         let mut d = daemon();
         let tmp = test_dir("queue");
         for n in 0..MAX_DOWNLOADS {
-            let dl = download("aa", meta(0, 0), &tmp);
-            d.downloads.insert(format!("~/s/{n}"), dl);
+            d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &tmp));
         }
         let queued = |d: &Daemon| d.queued.get("~/s/f").map(|(from, m)| (from.clone(), m.vv.clone()));
         let mut r = meta(0, 0);
@@ -1512,8 +1506,7 @@ mod tests {
         let mut d = daemon();
         let tmp = test_dir("pump");
         for n in 0..MAX_DOWNLOADS {
-            let dl = download("aa", meta(0, 0), &tmp);
-            d.downloads.insert(format!("~/s/{n}"), dl);
+            d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &tmp));
         }
         d.queued.insert("~/s/f".into(), ("aa".into(), meta(0, 0)));
         d.queued.insert("~/s/g".into(), ("bb".into(), meta(0, 0)));

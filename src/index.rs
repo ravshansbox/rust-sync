@@ -70,7 +70,7 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
-    pub fn deleted(&self) -> bool {
+    pub const fn deleted(&self) -> bool {
         self.hash.is_none()
     }
 }

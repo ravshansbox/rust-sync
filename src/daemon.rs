@@ -2039,6 +2039,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_does_not_come_up_when_the_dialler_does_not_trust_the_listener() {
+        let dir = test_dir("distrust");
+        let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (a_tx, a_rx) = mpsc::unbounded_channel();
+        let (b_tx, b_rx) = mpsc::unbounded_channel();
+        let answer = async |mut rx: mpsc::UnboundedReceiver<Event>, trust: bool| {
+            let Some(Event::Auth { reply, .. }) = rx.recv().await else { panic!() };
+            reply.send(trust).unwrap();
+            rx.recv().await.is_none()
+        };
+        let dialler = async {
+            let s = TcpStream::connect(addr).await.unwrap();
+            connection_inner(s, addr.ip(), Some(b.id()), a.clone(), a_tx, 4000).await
+        };
+        let listener = async {
+            let (s, peer) = l.accept().await.unwrap();
+            connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
+        };
+        let (a_res, b_res, a_quiet, b_quiet) = tokio::join!(dialler, listener, answer(a_rx, false), answer(b_rx, true));
+        a_res.unwrap();
+        b_res.unwrap();
+        assert_eq!((a_quiet, b_quiet), (true, true));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn trusted_connection_comes_up_carries_messages_and_goes_down() {
         let dir = test_dir("up");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());

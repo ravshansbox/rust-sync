@@ -134,8 +134,7 @@ impl Writer {
         }
         let mut frame = vec![0u8; plain.len() + TAG];
         let n = self.t.lock().unwrap().write_message(&plain, &mut frame)?;
-        write_frame(&mut self.w, &frame[..n]).await?;
-        Ok(())
+        Ok(write_frame(&mut self.w, &frame[..n]).await?)
     }
 }
 

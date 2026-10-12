@@ -251,6 +251,7 @@ mod tests {
         assert_eq!(decide(Some(&l), &meta(Some(2), 1, 2, vv(&[(2, 1)]))), Action::LocalWins);
         assert_eq!(decide(Some(&l), &meta(Some(2), 5, 2, vv(&[(2, 1)]))), Action::Conflict);
         assert_eq!(decide(Some(&l), &meta(Some(2), 5, 0, vv(&[(0, 1)]))), Action::LocalWins);
+        assert_eq!(decide(Some(&l), &meta(Some(2), 5, 1, vv(&[(2, 1)]))), Action::LocalWins);
     }
 
     #[test]

@@ -760,15 +760,14 @@ pub fn status_text(
     connected: impl Fn(&str) -> Option<bool>,
     pending: &BTreeMap<String, String>,
 ) -> String {
-    let mut s = format!("This node: {}\nPort: {}\n", net::pretty_id(me), cfg.port);
-    if connected(me).is_none() {
-        s.push_str("Daemon: not running (start it with `rust-sync daemon`)\n");
-    }
-    s.push_str("\nNodes:\n");
-    s.push_str(&nodes_text(cfg, connected, pending));
-    s.push_str("\nPaths:\n");
-    s.push_str(&paths_text(cfg));
-    s
+    let daemon = if connected(me).is_none() { "Daemon: not running (start it with `rust-sync daemon`)\n" } else { "" };
+    format!(
+        "This node: {}\nPort: {}\n{daemon}\nNodes:\n{}\nPaths:\n{}",
+        net::pretty_id(me),
+        cfg.port,
+        nodes_text(cfg, connected, pending),
+        paths_text(cfg)
+    )
 }
 
 /// Synced files and folders. Folders end with `/`.

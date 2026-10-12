@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn launchd_targets_and_plist_paths() {
-        let uid = std::fs::metadata(paths::home()).unwrap().uid();
+        let uid = uid().unwrap();
         assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{uid}/{LABEL}"));
         assert_eq!(Mode::System.target().unwrap(), format!("system/{LABEL}"));
         assert_eq!(Mode::Agent.plist(), paths::home().join(format!("Library/LaunchAgents/{LABEL}.plist")));

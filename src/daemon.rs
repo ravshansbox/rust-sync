@@ -1669,7 +1669,7 @@ mod tests {
         d.index.insert("~/s/f.txt".into(), local);
         let mut r = meta(5, 2);
         r.vv = Vv(vec![(2, 1)]);
-        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp.clone()));
+        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp));
         assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
         assert_eq!(d.index["~/s/f.txt"], r);

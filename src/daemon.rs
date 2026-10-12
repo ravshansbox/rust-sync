@@ -1973,6 +1973,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn debounce_sends_paths_after_the_longest_wait_even_while_changes_keep_coming() {
+        let (in_tx, in_rx) = mpsc::unbounded_channel();
+        let (out_tx, mut out_rx) = mpsc::unbounded_channel();
+        drop(tokio::spawn(debounce(in_rx, out_tx)));
+        let feed = tokio::spawn(async move {
+            while in_tx.send(Some(PathBuf::from("/a"))).is_ok() {
+                tokio::time::sleep(SETTLE / 5).await;
+            }
+        });
+        let got = timeout(SETTLE_MAX + SETTLE, out_rx.recv()).await;
+        feed.abort();
+        assert!(matches!(got, Ok(Some(Event::Fs(_)))));
+    }
+
+    #[tokio::test]
     async fn upload_sends_file_in_chunks_then_eof_or_unavailable_when_missing() {
         let lp = test_dir("upload");
         let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();

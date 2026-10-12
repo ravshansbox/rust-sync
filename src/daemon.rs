@@ -1873,10 +1873,12 @@ mod tests {
     }
 
     #[test]
-    fn batches_gives_an_oversized_entry_its_own_batch() {
+    fn batches_gives_an_oversized_entry_its_own_batch_even_when_first() {
         let big = entry(format!("~/{}", "b".repeat(50_000)), 1);
-        let out = batches(vec![entry("~/a".into(), 1), big, entry("~/c".into(), 1)]);
+        let out = batches(vec![entry("~/a".into(), 1), big.clone(), entry("~/c".into(), 1)]);
         assert_eq!(out.iter().map(Vec::len).collect::<Vec<_>>(), [1, 1, 1]);
+        let out = batches(vec![big, entry("~/c".into(), 1)]);
+        assert_eq!(out.iter().map(Vec::len).collect::<Vec<_>>(), [1, 1]);
     }
 
     #[test]

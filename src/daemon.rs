@@ -1352,6 +1352,33 @@ mod tests {
     }
 
     #[test]
+    fn peer_config_removing_a_node_drops_its_connection_and_downloads_and_an_old_config_changes_nothing() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let mut rxs = Vec::new();
+        for (id, conn) in [("aa", 1), ("bb", 2)] {
+            d.cfg.set_node(&me, id, "h:1", false);
+            let (ctl, rx) = mpsc::unbounded_channel();
+            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            rxs.push(rx);
+        }
+        d.queued.insert("~/s/f".into(), ("bb".into(), meta(0, 0)));
+        let old = d.cfg.shared.clone();
+        let mut theirs = Config { clock: d.cfg.clock, ..Config::default() };
+        theirs.set_node("aa", "bb", "h:1", true);
+        for rx in &mut rxs {
+            while rx.try_recv().is_ok() {}
+        }
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Config(theirs.shared) });
+        assert_eq!(d.peers.keys().collect::<Vec<_>>(), ["aa"]);
+        assert!(d.queued.is_empty());
+        assert!(matches!(rxs[0].try_recv(), Ok(Msg::Config(c)) if c.nodes["bb"].removed));
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Config(old) });
+        assert!(d.cfg.trusted("bb").is_none());
+        assert!(rxs[0].try_recv().is_err());
+    }
+
+    #[test]
     fn unavailable_cancels_a_download_only_when_sent_by_its_source() {
         let mut d = daemon();
         let me = d.me.clone();

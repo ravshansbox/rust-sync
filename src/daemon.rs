@@ -1162,6 +1162,19 @@ mod tests {
         assert!(!text.contains("Waiting to be trusted"), "{text}");
     }
 
+    #[tokio::test]
+    async fn trusting_a_waiting_node_stops_listing_it_and_dials_it_without_waiting_to_retry() {
+        let mut d = daemon();
+        d.handle(Event::Auth { id: "aa".into(), addr: Some("h:1".into()), reply: oneshot::channel().0 });
+        d.backoff.insert("aa".into(), Duration::from_secs(8));
+        let resp = d.on_ctl(&Req::AddNode { id: "aa".into(), addr: "127.0.0.1:1".into() });
+        assert!(resp.ok, "{}", resp.text);
+        let text = d.on_ctl(&Req::ListNodes).text;
+        assert!(!text.contains("Waiting to be trusted"), "{text}");
+        assert!(d.backoff.is_empty());
+        assert_eq!(d.dialling, HashSet::from(["aa".to_string()]));
+    }
+
     #[test]
     fn duplicate_connection_is_kept_only_if_dialled_by_the_lower_id() {
         let mut d = daemon();

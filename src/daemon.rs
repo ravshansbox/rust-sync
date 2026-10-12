@@ -1658,6 +1658,26 @@ mod tests {
     }
 
     #[test]
+    fn downloaded_change_that_beats_a_local_deletion_restores_the_file() {
+        let mut d = daemon();
+        let dir = test_dir("restore");
+        std::fs::create_dir_all(&dir).unwrap();
+        let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(9, 1);
+        (local.hash, local.vv) = (None, Vv(vec![(1, 1)]));
+        d.index.insert("~/s/f.txt".into(), local);
+        let mut r = meta(5, 2);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp.clone()));
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert_eq!(d.index["~/s/f.txt"], r);
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn newer_remote_deletion_removes_the_local_file() {
         let mut d = daemon();
         let dir = test_dir("delete");

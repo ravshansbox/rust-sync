@@ -994,7 +994,7 @@ async fn connection_inner(
         (trusted, probe, trusts_us)
     } else {
         let (their_port, probe, trusts_us) = recv_hello(&mut r).await?;
-        let trusted = auth(Some(format!("{ip}:{their_port}"))).await.unwrap_or(false);
+        let trusted = auth(Some(SocketAddr::new(ip, their_port).to_string())).await.unwrap_or(false);
         w.send(&hello(trusted)).await?;
         (trusted, probe, trusts_us)
     };
@@ -2244,28 +2244,31 @@ mod tests {
         let dir = test_dir("trust");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
-        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = l.local_addr().unwrap();
-        let (a_tx, a_rx) = mpsc::unbounded_channel();
-        let (b_tx, b_rx) = mpsc::unbounded_channel();
-        let answer = async |mut rx: mpsc::UnboundedReceiver<Event>, trust: bool| {
-            let Some(Event::Auth { id, addr, reply }) = rx.recv().await else { panic!() };
-            reply.send(trust).unwrap();
-            (id, addr, rx.recv().await.is_none())
-        };
-        let dialler = async {
-            let s = TcpStream::connect(addr).await.unwrap();
-            connection_inner(s, addr.ip(), Some(b.id()), a.clone(), a_tx, 4000).await
-        };
-        let listener = async {
-            let (s, peer) = l.accept().await.unwrap();
-            connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
-        };
-        let (a_res, b_res, a_seen, b_seen) = tokio::join!(dialler, listener, answer(a_rx, true), answer(b_rx, false));
-        a_res.unwrap();
-        b_res.unwrap();
-        assert_eq!(a_seen, (b.id(), None, true));
-        assert_eq!(b_seen, (a.id(), Some("127.0.0.1:4000".into()), true));
+        for (bind, seen) in [("127.0.0.1:0", "127.0.0.1:4000"), ("[::1]:0", "[::1]:4000")] {
+            let l = TcpListener::bind(bind).await.unwrap();
+            let addr = l.local_addr().unwrap();
+            let (a_tx, a_rx) = mpsc::unbounded_channel();
+            let (b_tx, b_rx) = mpsc::unbounded_channel();
+            let answer = async |mut rx: mpsc::UnboundedReceiver<Event>, trust: bool| {
+                let Some(Event::Auth { id, addr, reply }) = rx.recv().await else { panic!() };
+                reply.send(trust).unwrap();
+                (id, addr, rx.recv().await.is_none())
+            };
+            let dialler = async {
+                let s = TcpStream::connect(addr).await.unwrap();
+                connection_inner(s, addr.ip(), Some(b.id()), a.clone(), a_tx, 4000).await
+            };
+            let listener = async {
+                let (s, peer) = l.accept().await.unwrap();
+                connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
+            };
+            let (a_res, b_res, a_seen, b_seen) =
+                tokio::join!(dialler, listener, answer(a_rx, true), answer(b_rx, false));
+            a_res.unwrap();
+            b_res.unwrap();
+            assert_eq!(a_seen, (b.id(), None, true));
+            assert_eq!(b_seen, (a.id(), Some(seen.into()), true));
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

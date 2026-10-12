@@ -2001,10 +2001,10 @@ mod tests {
         let dialled = "ab".repeat(32);
         let s = TcpStream::connect(addr).await.unwrap();
         let client = connection_inner(s, addr.ip(), Some(dialled.clone()), keys, tx, 0);
-        let ((), res) = tokio::join!(server, client);
+        let ((), res, quiet) = tokio::join!(server, client, async { rx.recv().await.is_none() });
         let want = format!("expected node {} but found {}", net::pretty_id(&dialled), net::pretty_id(&other.id()));
         assert_eq!(res.unwrap_err().to_string(), want);
-        assert!(rx.recv().await.is_none());
+        assert!(quiet);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

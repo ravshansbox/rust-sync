@@ -2327,6 +2327,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_ends_on_the_next_message_once_the_daemon_has_stopped() {
+        let dir = test_dir("stopped");
+        let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+        let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (stopped_tx, stopped_rx) = oneshot::channel();
+        let peer = async {
+            let s = TcpStream::connect(addr).await.unwrap();
+            let (mut r, mut w, _) = net::handshake(s, &a, true).await.unwrap();
+            w.send(&Msg::Hello { port: 4000, probe: false, trusts_you: true }).await.unwrap();
+            r.recv().await.unwrap();
+            stopped_rx.await.unwrap();
+            w.send(&Msg::Unavailable { path: "x".into() }).await.unwrap();
+            (r, w)
+        };
+        let listener = async {
+            let (s, peer) = l.accept().await.unwrap();
+            timeout(Duration::from_secs(5), connection_inner(s, peer.ip(), None, b.clone(), tx, 5000)).await
+        };
+        let daemon = async {
+            let Some(Event::Auth { reply, .. }) = rx.recv().await else { panic!() };
+            reply.send(true).unwrap();
+            let Some(Event::Up { ctl, .. }) = rx.recv().await else { panic!() };
+            drop(rx);
+            stopped_tx.send(()).unwrap();
+            ctl
+        };
+        let (_peer, res, _ctl) = tokio::join!(peer, listener, daemon);
+        res.expect("connection should end at once").unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn accept_loop_serves_each_incoming_connection_with_its_ipv4_address() {
         let dir = test_dir("accept");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());

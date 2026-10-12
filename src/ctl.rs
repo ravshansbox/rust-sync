@@ -142,6 +142,15 @@ mod tests {
     }
 
     #[test]
+    fn short_state_folder_keeps_socket_inside() {
+        let state = PathBuf::from(format!("/{}", "s".repeat(89)));
+        let p = socket_path_in(&state).unwrap();
+        assert_eq!(p.as_os_str().len(), 99);
+        assert_eq!(p, state.join("ctl.sock"));
+        assert!(!state.exists());
+    }
+
+    #[test]
     fn long_state_folder_gets_private_socket_in_tmp() {
         let base = std::env::temp_dir().join(format!("rust-sync-sock-{}", std::process::id()));
         let state = base.join("a".repeat(100));

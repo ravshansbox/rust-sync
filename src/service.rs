@@ -210,7 +210,7 @@ fn installed_or_bail() -> anyhow::Result<Mode> {
 /// (`KeepAlive` / `SuccessfulExit` = false), so it stays stopped.
 async fn stop_now(mode: Mode) -> anyhow::Result<()> {
     if loaded(mode)? {
-        let _ = launchctl(mode, &["kill", "SIGTERM", &mode.target()?]);
+        let _ = mode.launchctl(&["kill", "SIGTERM", &mode.target()?]);
     }
     if !wait_for(false).await? {
         bail!("still running. If you started it with `rust-sync daemon`, stop it there with Ctrl-C.");

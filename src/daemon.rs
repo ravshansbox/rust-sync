@@ -1312,6 +1312,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn node_that_goes_down_is_redialled_after_a_second() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        d.tx = tx;
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        assert!(timeout(Duration::from_millis(900), rx.recv()).await.is_err());
+        let ev = timeout(Duration::from_millis(500), rx.recv()).await.unwrap();
+        assert!(matches!(ev, Some(Event::Redial { id }) if id == "aa"));
+    }
+
+    #[tokio::test]
     async fn failed_dials_wait_twice_as_long_each_time_up_to_a_limit_until_connected() {
         let mut d = daemon();
         let me = d.me.clone();

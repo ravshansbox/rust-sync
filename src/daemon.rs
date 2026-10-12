@@ -1611,6 +1611,19 @@ mod tests {
     }
 
     #[test]
+    fn newer_remote_deletion_of_a_file_already_deleted_is_taken_as_is() {
+        let mut d = daemon();
+        let mut local = meta(5, 1);
+        (local.hash, local.size, local.vv) = (None, 0, Vv(vec![(1, 1)]));
+        d.index.insert("~/s/f.txt".into(), local);
+        let mut r = meta(9, 2);
+        (r.hash, r.size, r.vv) = (None, 3, Vv(vec![(1, 2)]));
+        d.apply("aa", "~/s/f.txt", Path::new("/nonexistent/f.txt"), r.clone(), None);
+        assert_eq!(d.index["~/s/f.txt"], r);
+        assert_eq!(d.outbox.len(), 1);
+    }
+
+    #[test]
     fn same_content_with_a_new_mode_from_remote_changes_only_the_permissions() {
         let mut d = daemon();
         let dir = test_dir("mode");

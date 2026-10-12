@@ -1987,6 +1987,23 @@ mod tests {
     }
 
     #[test]
+    fn tree_check_skips_the_state_folder() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let state = paths::state_dir();
+        let dir = state.parent().unwrap();
+        std::fs::create_dir_all(state).unwrap();
+        std::fs::write(state.join("index.bin"), "x").unwrap();
+        std::fs::write(dir.join("notes.txt"), "x").unwrap();
+        let root = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &root, true, false);
+        d.check_tree(&root);
+        let notes = dir.join("notes.txt").to_str().unwrap().to_string();
+        assert_eq!(d.index.keys().collect::<Vec<_>>(), [&notes]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn unreadable_file_is_not_recorded() {
         let mut d = daemon();
         let me = d.me.clone();

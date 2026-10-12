@@ -361,6 +361,12 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn node_add_rejects_invalid_id_before_connecting() {
+        let a = NodeAdd { addr: "127.0.0.1:1".into(), id: Some("not-an-id".into()), yes: true };
+        assert_eq!(node_add(a).await.unwrap_err().to_string(), "not a valid node ID");
+    }
+
+    #[tokio::test]
     async fn send_without_daemon_saves_change_to_config_file() {
         send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
         let cfg = Config::load(&paths::config_file()).unwrap();

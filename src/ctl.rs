@@ -28,7 +28,10 @@ pub struct Resp {
 /// `<state dir>/ctl.sock`. Unix socket paths must be short (104 bytes on macOS),
 /// so for a long state folder path we use a private folder in /tmp, as tmux does.
 pub fn socket_path() -> anyhow::Result<PathBuf> {
-    let state = crate::paths::state_dir();
+    socket_path_in(crate::paths::state_dir())
+}
+
+fn socket_path_in(state: &Path) -> anyhow::Result<PathBuf> {
     let p = state.join("ctl.sock");
     if p.as_os_str().len() < 100 {
         return Ok(p);
@@ -136,6 +139,22 @@ mod tests {
             assert!(p.starts_with("/tmp"));
             assert_eq!(p.extension().unwrap(), "sock");
         }
+    }
+
+    #[test]
+    fn long_state_folder_gets_private_socket_in_tmp() {
+        let base = std::env::temp_dir().join(format!("rust-sync-sock-{}", std::process::id()));
+        let state = base.join("a".repeat(100));
+        let p = socket_path_in(&state).unwrap();
+        assert!(p.as_os_str().len() < 104);
+        assert_eq!(p, socket_path_in(&state).unwrap());
+        assert_ne!(p, socket_path_in(&base.join("b".repeat(100))).unwrap());
+        let dir = p.parent().unwrap();
+        assert_eq!(dir, Path::new(&format!("/tmp/rust-sync-{}", std::fs::metadata(&state).unwrap().uid())));
+        assert_eq!(std::fs::metadata(dir).unwrap().mode() & 0o777, 0o700);
+        let name = p.file_name().unwrap().to_str().unwrap();
+        assert!(name.len() == 21 && name.ends_with(".sock"));
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[tokio::test]

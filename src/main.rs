@@ -373,6 +373,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn node_add_rejects_node_with_a_different_id_than_given() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-node-add-{}", std::process::id()));
+        let keys = net::load_or_create_keys(&dir).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = async {
+            let (s, _) = listener.accept().await.unwrap();
+            let (mut r, _w, _) = net::handshake(s, &keys, false).await.unwrap();
+            let _ = r.recv().await;
+        };
+        let expected = "ab".repeat(32);
+        let a = NodeAdd { addr, id: Some(expected.clone()), yes: false };
+        let ((), result) = tokio::join!(server, node_add(a));
+        let want = format!("that is not the ID you gave ({}). Node not added.", net::pretty_id(&expected));
+        assert_eq!(result.unwrap_err().to_string(), want);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
     async fn send_without_daemon_saves_change_to_config_file() {
         send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
         let cfg = Config::load(&paths::config_file()).unwrap();

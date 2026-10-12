@@ -85,6 +85,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn state_files_live_in_state_folder() {
+        assert_eq!(config_file(), state_dir().join("config.json"));
+        assert_eq!(index_file(), state_dir().join("index.bin"));
+    }
+
+    #[test]
     fn is_under_matches_root_and_children_only() {
         assert!(is_under("/a/b", "/a/b"));
         assert!(is_under("/a/b/c", "/a/b"));

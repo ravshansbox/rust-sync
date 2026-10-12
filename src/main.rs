@@ -261,7 +261,6 @@ async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
         None if a.yes => {}
         None => {
             out!("Check this matches `rust-sync id` on that machine. Trust it? [y/N] ");
-            std::io::stdout().flush()?;
             let mut answer = String::new();
             std::io::stdin().read_line(&mut answer)?;
             if !answer.trim().eq_ignore_ascii_case("y") {

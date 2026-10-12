@@ -47,7 +47,7 @@ impl Mode {
     }
 
     /// When the daemon starts by itself: "login" or "boot".
-    fn when(self) -> &'static str {
+    const fn when(self) -> &'static str {
         match self {
             Self::Agent => "login",
             Self::System => "boot",

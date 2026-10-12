@@ -1575,6 +1575,21 @@ mod tests {
     }
 
     #[test]
+    fn newer_remote_deletion_of_a_file_already_gone_is_still_recorded() {
+        let mut d = daemon();
+        let lp = Path::new("/nonexistent/f.txt");
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local);
+        let mut r = meta(1, 1);
+        r.hash = None;
+        r.vv = Vv(vec![(1, 2)]);
+        d.apply("aa", "~/s/f.txt", lp, r, None);
+        assert!(d.index["~/s/f.txt"].deleted());
+        assert_eq!(d.outbox.len(), 1);
+    }
+
+    #[test]
     fn same_content_from_remote_merges_history_and_keeps_local_size_and_mtime() {
         let mut d = daemon();
         let lp = Path::new("/nonexistent/f.txt");

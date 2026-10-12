@@ -56,8 +56,7 @@ impl Config {
     }
 
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
-        crate::paths::write_atomic(path, &serde_json::to_vec_pretty(self)?)?;
-        Ok(())
+        Ok(crate::paths::write_atomic(path, &serde_json::to_vec_pretty(self)?)?)
     }
 
     fn stamp(&mut self, me: &str) -> Stamp {

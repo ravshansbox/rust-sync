@@ -1713,6 +1713,21 @@ mod tests {
     }
 
     #[test]
+    fn download_that_cannot_be_moved_into_place_is_dropped_and_not_recorded() {
+        let mut d = daemon();
+        let dir = test_dir("unwritable");
+        let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
+        std::fs::create_dir_all(lp.join("sub")).unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        d.apply("aa", "~/s/f.txt", &lp, meta(1, 2), Some(tmp.clone()));
+        assert!(!tmp.exists());
+        assert!(lp.is_dir());
+        assert!(d.index.is_empty());
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn same_content_from_remote_merges_history_and_keeps_local_size_and_mtime() {
         let mut d = daemon();
         let lp = Path::new("/nonexistent/f.txt");

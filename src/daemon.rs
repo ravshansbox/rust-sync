@@ -2033,8 +2033,9 @@ mod tests {
 
     #[test]
     fn batches_fit_in_one_message() {
-        let entries: Vec<_> = (0..500).map(|i| entry(format!("~/{}/{i}", "x".repeat(200)), 8)).collect();
-        for b in batches(entries) {
+        let long_paths = (0..500).map(|i| entry(format!("~/{}/{i}", "x".repeat(200)), 8));
+        let long_histories = (0..50).map(|i| entry(format!("~/{i}"), 100));
+        for b in batches(long_paths.chain(long_histories).collect()) {
             let len = postcard::to_stdvec(&Msg::Index(b)).unwrap().len();
             assert!(len <= net::MAX_MSG, "{len}");
         }

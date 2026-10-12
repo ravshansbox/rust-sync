@@ -112,12 +112,21 @@ mod tests {
     }
 
     #[test]
-    fn timestamp_has_fixed_format() {
-        let t = timestamp();
+    fn timestamp_shows_current_utc_time() {
+        let now = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let (secs, t) = loop {
+            let before = now();
+            let t = timestamp();
+            if now() == before {
+                break (before, t);
+            }
+        };
+        let (y, m, d) = civil_from_days((secs / 86_400).cast_signed());
         assert_eq!(t.len(), 20);
-        assert_eq!(&t[4..5], "-");
-        assert_eq!(&t[10..11], " ");
-        assert!(t.ends_with('Z'));
+        assert_eq!(&t[..11], format!("{y:04}-{m:02}-{d:02} "));
+        let field = |r: std::ops::Range<usize>| t[r].parse::<u64>().unwrap();
+        assert_eq!(field(11..13) * 3600 + field(14..16) * 60 + field(17..19), secs % 86_400);
+        assert_eq!((&t[13..14], &t[16..17], &t[19..]), (":", ":", "Z"));
     }
 
     #[test]

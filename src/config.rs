@@ -141,6 +141,7 @@ mod tests {
     fn with_port_adds_default_only_when_missing() {
         assert_eq!(with_port("host"), format!("host:{DEFAULT_PORT}"));
         assert_eq!(with_port("host:80"), "host:80");
+        assert_eq!(with_port("[::1]:80"), "[::1]:80");
         assert_eq!(with_port("host:x"), format!("host:x:{DEFAULT_PORT}"));
         assert_eq!(with_port("host:70000"), format!("host:70000:{DEFAULT_PORT}"));
     }

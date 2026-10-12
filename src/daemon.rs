@@ -363,9 +363,6 @@ impl Daemon {
 
     /// Send the index entries that changed while handling the last event.
     fn flush(&mut self) {
-        if self.outbox.is_empty() {
-            return;
-        }
         for batch in batches(std::mem::take(&mut self.outbox)) {
             self.broadcast(&Msg::Index(batch));
         }

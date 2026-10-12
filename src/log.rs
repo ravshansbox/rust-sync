@@ -156,6 +156,23 @@ mod tests {
     }
 
     #[test]
+    fn line_counts_written_lines_towards_max_size() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let dir = test_dir("count");
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        let line_len = timestamp().len() + " hello\n".len();
+        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
+        to_file(path.clone()).unwrap();
+        line(format_args!("hello"));
+        line(format_args!("hello"));
+        close_file();
+        assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE);
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), line_len as u64);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn to_file_creates_missing_folder_and_appends_across_reopens() {
         let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("to-file");

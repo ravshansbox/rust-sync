@@ -382,7 +382,8 @@ mod tests {
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"));
         assert!(xml.contains(&format!("<key>Label</key>\n  <string>{LABEL}</string>\n")));
         assert!(xml.contains("<string>/opt/a&amp;b/&lt;rust-sync&gt;</string>\n    <string>daemon</string>"));
-        assert!(xml.contains(&format!("<string>--log-file</string>\n    <string>{}</string>", log_path().display())));
+        let log = paths::home().join("Library/Logs/rust-sync.log");
+        assert!(xml.contains(&format!("<string>--log-file</string>\n    <string>{}</string>", log.display())));
         assert!(!xml.contains("UserName"));
         assert!(!xml.contains("<key>HOME</key>"));
         assert_eq!(xml.contains("<key>RUST_SYNC_HOME</key>"), std::env::var("RUST_SYNC_HOME").is_ok());

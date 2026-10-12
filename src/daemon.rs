@@ -1095,6 +1095,12 @@ mod tests {
         std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
     }
 
+    fn up(d: &mut Daemon, id: &str, conn: u64) -> mpsc::UnboundedReceiver<Msg> {
+        let (ctl, rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+        rx
+    }
+
     fn daemon() -> Daemon {
         let keys = Arc::new(Keys { private: vec![0; 32], public: vec![1; 32] });
         let me = keys.id();
@@ -1206,8 +1212,7 @@ mod tests {
         for id in ["aa", "bb", "cc"] {
             d.cfg.set_node(&me, id, "127.0.0.1:1", false);
         }
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         while rx.try_recv().is_ok() {}
         d.backoff.insert("bb".into(), Duration::from_secs(1));
         d.handle(Event::Tick);
@@ -1239,8 +1244,7 @@ mod tests {
         let mut d = daemon();
         let me = d.me.clone();
         d.cfg.set_node(&me, "aa", "h:1", false);
-        let (ctl, _rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let _rx = up(&mut d, "aa", 1);
         d.handle(Event::Down { id: "aa".into(), conn: 2 });
         assert!(d.on_ctl(&Req::ListNodes).text.contains("  connected"));
         d.handle(Event::Down { id: "aa".into(), conn: 1 });
@@ -1258,8 +1262,7 @@ mod tests {
             waits.push(d.backoff["aa"].as_secs());
         }
         assert_eq!(waits, [1, 2, 4, 8, 16, MAX_BACKOFF.as_secs(), MAX_BACKOFF.as_secs()]);
-        let ctl = mpsc::unbounded_channel().0;
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        up(&mut d, "aa", 1);
         d.handle(Event::DialDone { id: "aa".into() });
         assert!(d.backoff.is_empty());
     }
@@ -1271,8 +1274,7 @@ mod tests {
         let mut tmps = Vec::new();
         for (id, conn) in [("aa", 1), ("bb", 2)] {
             d.cfg.set_node(&me, id, "h:1", false);
-            let ctl = mpsc::unbounded_channel().0;
-            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            up(&mut d, id, conn);
             let tmp = test_dir(&format!("down-{id}"));
             d.downloads.insert(format!("~/s/{id}"), download(id, meta(0, 0), &tmp));
             tmps.push(tmp);
@@ -1291,8 +1293,7 @@ mod tests {
         d.cfg.set_root(&me, "~/s", true, false);
         d.index.insert("~/s/f".into(), meta(0, 0));
         d.index.insert("~/x".into(), meta(0, 0));
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         while rx.try_recv().is_ok() {}
         for (path, hash) in [("~/s/f", [2; 32]), ("~/x", [1; 32])] {
             d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.into(), hash } });
@@ -1305,8 +1306,7 @@ mod tests {
         let mut d = daemon();
         let me = d.me.clone();
         d.cfg.set_node(&me, "aa", "h:1", false);
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         while rx.try_recv().is_ok() {}
         let request = || Msg::Request { path: "~/x".into(), hash: [1; 32] };
         d.handle(Event::Peer { id: "aa".into(), conn: 2, msg: request() });
@@ -1323,8 +1323,7 @@ mod tests {
         d.cfg.set_root(&me, "~/s", true, false);
         d.index.insert("~/s/f".into(), meta(0, 0));
         d.index.insert("~/x".into(), meta(0, 0));
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         assert!(matches!(rx.try_recv(), Ok(Msg::Config(_))));
         let Ok(Msg::Index(entries)) = rx.try_recv() else { panic!("no index sent") };
         assert_eq!(entries.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(), ["~/s/f"]);
@@ -1350,8 +1349,7 @@ mod tests {
         let mut d = daemon();
         let me = d.me.clone();
         d.cfg.set_node(&me, "aa", "h:1", false);
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         while rx.try_recv().is_ok() {}
         let clock = d.cfg.clock;
         let resp = d.on_ctl(&Req::RemovePath { path: "~/x".into() });
@@ -1374,8 +1372,7 @@ mod tests {
         d.cfg.set_node(&me, "aa", "h:1", false);
         d.index.insert(known.clone(), FileMeta { hash: None, ..meta(0, 2) });
         d.index.insert(dir.join("x").to_str().unwrap().into(), meta(0, 2));
-        let (ctl, mut rx) = mpsc::unbounded_channel();
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        let mut rx = up(&mut d, "aa", 1);
         while rx.try_recv().is_ok() {}
         let resp = d.on_ctl(&Req::AddPath { path: root.clone(), is_dir: true });
         assert!(resp.ok, "{}", resp.text);
@@ -1392,8 +1389,7 @@ mod tests {
         let mut rxs = Vec::new();
         for (id, conn) in [("aa", 1), ("bb", 2)] {
             d.cfg.set_node(&me, id, "h:1", false);
-            let (ctl, rx) = mpsc::unbounded_channel();
-            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            let rx = up(&mut d, id, conn);
             rxs.push(rx);
         }
         d.queued.insert("~/s/f".into(), ("bb".into(), meta(0, 0)));
@@ -1418,8 +1414,7 @@ mod tests {
         let me = d.me.clone();
         for (id, conn) in [("aa", 1), ("bb", 2)] {
             d.cfg.set_node(&me, id, "h:1", false);
-            let ctl = mpsc::unbounded_channel().0;
-            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            up(&mut d, id, conn);
         }
         let tmp = test_dir("unavailable");
         d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
@@ -1435,8 +1430,7 @@ mod tests {
         let me = d.me.clone();
         for (id, conn) in [("aa", 1), ("bb", 2)] {
             d.cfg.set_node(&me, id, "h:1", false);
-            let ctl = mpsc::unbounded_channel().0;
-            d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+            up(&mut d, id, conn);
         }
         let tmp = test_dir("data");
         d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
@@ -1453,8 +1447,7 @@ mod tests {
         let mut d = daemon();
         let me = d.me.clone();
         d.cfg.set_node(&me, "aa", "h:1", false);
-        let ctl = mpsc::unbounded_channel().0;
-        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        up(&mut d, "aa", 1);
         let tmp = test_dir("mismatch");
         d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
         let msg = Msg::Data { path: "~/s/f".into(), offset: 0, bytes: b"abc".to_vec(), eof: true };

@@ -97,8 +97,7 @@ pub fn load(path: &Path) -> Index {
 }
 
 pub fn save(index: &Index, path: &Path) -> anyhow::Result<()> {
-    crate::paths::write_atomic(path, &postcard::to_stdvec(index)?)?;
-    Ok(())
+    Ok(crate::paths::write_atomic(path, &postcard::to_stdvec(index)?)?)
 }
 
 /// Entries whose path is `prefix` or inside it.

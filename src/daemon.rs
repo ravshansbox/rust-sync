@@ -2000,7 +2000,8 @@ mod tests {
         d.check_tree(&root);
         let notes = dir.join("notes.txt").to_str().unwrap().to_string();
         assert_eq!(d.index.keys().collect::<Vec<_>>(), [&notes]);
-        std::fs::remove_dir_all(dir).unwrap();
+        std::fs::remove_file(dir.join("notes.txt")).unwrap();
+        std::fs::remove_file(state.join("index.bin")).unwrap();
     }
 
     #[test]

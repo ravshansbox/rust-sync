@@ -342,4 +342,16 @@ mod tests {
         let cli = parse(&["service", "install"]).unwrap();
         assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: false } }));
     }
+
+    #[tokio::test]
+    async fn send_without_daemon_saves_change_to_config_file() {
+        send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
+        let cfg = Config::load(&paths::config_file()).unwrap();
+        assert!(cfg.active_root("~/notes").unwrap().is_dir);
+        let err = send(Req::RemovePath { path: "~/missing".into() }).await.unwrap_err();
+        assert_eq!(err.to_string(), "~/missing is not synced");
+        assert!(Config::load(&paths::config_file()).unwrap().active_root("~/notes").is_some());
+        std::fs::remove_file(paths::config_file()).unwrap();
+        std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+    }
 }

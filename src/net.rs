@@ -239,6 +239,8 @@ mod tests {
         assert_eq!(loaded.private, created.private);
         std::fs::write(&path, [0u8; 10]).unwrap();
         assert!(load_or_create_keys(&dir).is_err());
+        std::fs::write(&path, [0u8; 65]).unwrap();
+        assert!(load_or_create_keys(&dir).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -295,10 +297,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_rejects_oversized_message() {
-        let (_, (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
-        let msg = Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; MAX_MSG], eof: true };
-        assert!(aw.send(&msg).await.is_err());
+    async fn send_accepts_largest_message_and_rejects_one_byte_more() {
+        let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
+        let data = |n| Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; n], eof: true };
+        let n = MAX_MSG - 10;
+        assert_eq!(postcard::to_stdvec(&data(n)).unwrap().len(), MAX_MSG);
+        aw.send(&data(n)).await.unwrap();
+        assert!(matches!(br.recv().await.unwrap(), Msg::Data { bytes, .. } if bytes.len() == n));
+        assert!(aw.send(&data(n + 1)).await.is_err());
     }
 
     #[tokio::test]

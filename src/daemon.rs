@@ -508,7 +508,7 @@ impl Daemon {
             }
         }
         let missing: Vec<String> = index::under(&self.index, p)
-            .filter(|(k, _)| !seen.contains(*k) && self.cfg.root_of(k).is_some())
+            .filter(|(k, _)| !seen.contains(*k))
             .map(|(k, _)| k.clone())
             .collect();
         for k in missing {

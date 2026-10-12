@@ -1267,6 +1267,24 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    #[test]
+    fn tick_rescans_active_roots_only_every_rescan_ticks() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("tick-rescan");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("f.txt"), "x").unwrap();
+        d.index_file = dir.join("index.bin");
+        d.cfg.set_root(&me, dir.to_str().unwrap(), true, false);
+        for _ in 1..RESCAN_TICKS {
+            d.handle(Event::Tick);
+        }
+        assert!(d.index.is_empty());
+        d.handle(Event::Tick);
+        assert!(d.index.contains_key(dir.join("f.txt").to_str().unwrap()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[tokio::test]
     async fn only_the_current_connection_going_down_marks_the_node_offline() {
         let mut d = daemon();

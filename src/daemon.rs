@@ -1829,6 +1829,26 @@ mod tests {
     }
 
     #[test]
+    fn file_recreated_with_the_same_stat_as_its_deletion_is_a_new_version() {
+        let mut d = daemon();
+        let me = d.me_short;
+        let dir = test_dir("recreate");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        let p = "~/s/f.txt";
+        let f = std::fs::File::create(&lp).unwrap();
+        f.set_modified(std::time::SystemTime::UNIX_EPOCH).unwrap();
+        std::fs::set_permissions(&lp, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let gone = FileMeta { hash: None, size: 0, mtime: 0, mode: 0o644, vv: Vv(vec![(me, 1)]), by: me };
+        d.index.insert(p.into(), gone);
+        d.check_file(p, &lp);
+        assert_eq!(d.index[p].hash, Some(*blake3::hash(b"").as_bytes()));
+        assert_eq!(d.index[p].vv, Vv(vec![(me, 2)]));
+        assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn local_permission_change_is_a_new_version() {
         let mut d = daemon();
         let me = d.me_short;

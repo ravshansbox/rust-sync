@@ -1211,6 +1211,23 @@ mod tests {
         assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
     }
 
+    #[test]
+    fn tick_saves_the_index_only_after_it_changed() {
+        let mut d = daemon();
+        let dir = test_dir("tick-save");
+        std::fs::create_dir_all(&dir).unwrap();
+        d.index_file = dir.join("index.bin");
+        d.handle(Event::Tick);
+        assert!(!d.index_file.exists());
+        d.set_entry("~/s/a", meta(0, 0));
+        d.handle(Event::Tick);
+        assert_eq!(index::load(&d.index_file).get("~/s/a"), Some(&meta(0, 0)));
+        std::fs::remove_file(&d.index_file).unwrap();
+        d.handle(Event::Tick);
+        assert!(!d.index_file.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[tokio::test]
     async fn only_the_current_connection_going_down_marks_the_node_offline() {
         let mut d = daemon();

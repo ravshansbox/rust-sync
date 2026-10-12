@@ -11,7 +11,6 @@ use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -442,15 +441,13 @@ impl Daemon {
     }
 
     fn status(&self) -> String {
-        let mut s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
+        let s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
         let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some()).count();
-        let _ = write!(
-            s,
-            "\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
+        format!(
+            "{s}\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
             self.downloads.len(),
             self.queued.len()
-        );
-        s
+        )
     }
 
     // ---- Watching and scanning ----

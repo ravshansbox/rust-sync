@@ -354,6 +354,12 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn path_remove_accepts_paths_that_no_longer_exist() {
+        let remove = |p: &str| run(Cmd::Path { cmd: PathCmd::Remove { path: PathBuf::from(p) } });
+        assert_eq!(remove("/no/such/path").await.unwrap_err().to_string(), "/no/such/path is not synced");
+    }
+
+    #[tokio::test]
     async fn node_remove_rejects_invalid_id() {
         let remove = |id: &str| run(Cmd::Node { cmd: NodeCmd::Remove { id: id.into() } });
         assert_eq!(remove("not-an-id").await.unwrap_err().to_string(), "not a valid node ID");

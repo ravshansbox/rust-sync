@@ -11,7 +11,6 @@
 use crate::ctl::{self, Req};
 use crate::paths;
 use anyhow::{Context, bail};
-use std::fmt::Write as _;
 use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -341,10 +340,8 @@ fn plist_xml(mode: Mode, exe: &Path) -> anyhow::Result<String> {
     let env = if vars.is_empty() {
         String::new()
     } else {
-        let entries = vars.iter().fold(String::new(), |mut out, (k, v)| {
-            let _ = write!(out, "    <key>{k}</key>\n    <string>{}</string>\n", esc(v));
-            out
-        });
+        let entries: String =
+            vars.iter().map(|(k, v)| format!("    <key>{k}</key>\n    <string>{}</string>\n", esc(v))).collect();
         format!("  <key>EnvironmentVariables</key>\n  <dict>\n{entries}  </dict>\n")
     };
     Ok(format!(

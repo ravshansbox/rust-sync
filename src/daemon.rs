@@ -2177,7 +2177,8 @@ mod tests {
         let s = connect_any(&format!("localhost:{port}")).await.unwrap();
         assert_eq!(s.peer_addr().unwrap(), l.local_addr().unwrap());
         drop((s, l));
-        assert!(connect_any("127.0.0.1:1").await.is_err());
+        let e = connect_any("127.0.0.1:1").await.unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::ConnectionRefused);
     }
 
     #[tokio::test]

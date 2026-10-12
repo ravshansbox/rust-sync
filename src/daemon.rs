@@ -1179,6 +1179,16 @@ mod tests {
     }
 
     #[test]
+    fn waiting_node_trusted_by_a_peer_is_no_longer_listed_once_connected() {
+        let mut d = daemon();
+        d.handle(Event::Auth { id: "aa".into(), addr: Some("h:1".into()), reply: oneshot::channel().0 });
+        d.cfg.set_node("peer", "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let text = d.on_ctl(&Req::ListNodes).text;
+        assert!(!text.contains("Waiting to be trusted"), "{text}");
+    }
+
+    #[test]
     fn connection_from_a_node_removed_after_auth_is_not_used() {
         let mut d = daemon();
         let me = d.me.clone();

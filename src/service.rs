@@ -386,7 +386,8 @@ mod tests {
         assert!(!xml.contains("UserName"));
         assert!(!xml.contains("<key>HOME</key>"));
         assert_eq!(xml.contains("<key>RUST_SYNC_HOME</key>"), std::env::var("RUST_SYNC_HOME").is_ok());
-        assert!(xml.contains("<key>SuccessfulExit</key>\n    <false/>"));
+        assert!(xml.contains("<key>RunAtLoad</key>\n  <true/>"));
+        assert!(xml.contains("<key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key>\n    <false/>"));
         assert!(xml.ends_with("</plist>\n"));
     }
 

@@ -166,7 +166,7 @@ mod tests {
         line(format_args!("second"));
         close_file();
         let text = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<_> = text.lines().map(|l| &l[21..]).collect();
+        let lines: Vec<_> = text.lines().map(|l| &l[timestamp().len() + 1..]).collect();
         assert_eq!(lines, ["first", "second"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }

@@ -1250,6 +1250,20 @@ mod tests {
         assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
     }
 
+    #[tokio::test]
+    async fn node_being_dialled_is_not_dialled_again_until_the_dial_is_done() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "127.0.0.1:1", false);
+        d.backoff.insert("aa".into(), Duration::from_secs(1));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        d.tx = tx;
+        d.handle(Event::Redial { id: "aa".into() });
+        d.handle(Event::Redial { id: "aa".into() });
+        assert!(matches!(rx.recv().await, Some(Event::DialDone { .. })));
+        assert!(timeout(Duration::from_millis(200), rx.recv()).await.is_err());
+    }
+
     #[test]
     fn tick_saves_the_index_only_after_it_changed() {
         let mut d = daemon();

@@ -1086,6 +1086,11 @@ mod tests {
         Entry { path, meta: m }
     }
 
+    fn download(from: &str, meta: FileMeta, tmp: &Path) -> Download {
+        let file = File::create(tmp).unwrap();
+        Download { from: from.into(), meta, tmp: tmp.to_path_buf(), file, hasher: blake3::Hasher::new(), written: 0 }
+    }
+
     fn test_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
     }
@@ -1269,8 +1274,7 @@ mod tests {
             let ctl = mpsc::unbounded_channel().0;
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
             let tmp = test_dir(&format!("down-{id}"));
-            let file = File::create(&tmp).unwrap();
-            let dl = Download { from: id.into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            let dl = download(id, meta(0, 0), &tmp);
             d.downloads.insert(format!("~/s/{id}"), dl);
             tmps.push(tmp);
         }
@@ -1419,8 +1423,7 @@ mod tests {
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
         let tmp = test_dir("unavailable");
-        let file = File::create(&tmp).unwrap();
-        let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        let dl = download("aa", meta(0, 0), &tmp);
         d.downloads.insert("~/s/f".into(), dl);
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: Msg::Unavailable { path: "~/s/f".into() } });
         assert!(tmp.exists());
@@ -1438,8 +1441,7 @@ mod tests {
             d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
         }
         let tmp = test_dir("data");
-        let file = File::create(&tmp).unwrap();
-        let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        let dl = download("aa", meta(0, 0), &tmp);
         d.downloads.insert("~/s/f".into(), dl);
         let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), offset, bytes: bytes.to_vec(), eof: false };
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: data(0, b"xx") });
@@ -1457,8 +1459,7 @@ mod tests {
         let ctl = mpsc::unbounded_channel().0;
         d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
         let tmp = test_dir("mismatch");
-        let file = File::create(&tmp).unwrap();
-        let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        let dl = download("aa", meta(0, 0), &tmp);
         d.downloads.insert("~/s/f".into(), dl);
         let msg = Msg::Data { path: "~/s/f".into(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
@@ -1470,10 +1471,9 @@ mod tests {
     fn a_running_download_is_replaced_only_by_a_newer_version() {
         let mut d = daemon();
         let tmp = test_dir("replace");
-        let file = File::create(&tmp).unwrap();
         let mut running = meta(0, 0);
         running.vv = Vv(vec![(1, 2)]);
-        let dl = Download { from: "aa".into(), meta: running, tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+        let dl = download("aa", running, &tmp);
         d.downloads.insert("~/s/f".into(), dl);
         let mut r = meta(0, 0);
         for n in [1, 2] {
@@ -1493,8 +1493,7 @@ mod tests {
         let mut d = daemon();
         let tmp = test_dir("queue");
         for n in 0..MAX_DOWNLOADS {
-            let file = File::create(&tmp).unwrap();
-            let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            let dl = download("aa", meta(0, 0), &tmp);
             d.downloads.insert(format!("~/s/{n}"), dl);
         }
         let queued = |d: &Daemon| d.queued.get("~/s/f").map(|(from, m)| (from.clone(), m.vv.clone()));
@@ -1513,8 +1512,7 @@ mod tests {
         let mut d = daemon();
         let tmp = test_dir("pump");
         for n in 0..MAX_DOWNLOADS {
-            let file = File::create(&tmp).unwrap();
-            let dl = Download { from: "aa".into(), meta: meta(0, 0), tmp: tmp.clone(), file, hasher: blake3::Hasher::new(), written: 0 };
+            let dl = download("aa", meta(0, 0), &tmp);
             d.downloads.insert(format!("~/s/{n}"), dl);
         }
         d.queued.insert("~/s/f".into(), ("aa".into(), meta(0, 0)));

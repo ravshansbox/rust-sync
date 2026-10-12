@@ -83,7 +83,7 @@ pub struct Entry {
 
 impl From<(&String, &FileMeta)> for Entry {
     fn from((path, meta): (&String, &FileMeta)) -> Self {
-        Entry { path: path.clone(), meta: meta.clone() }
+        Self { path: path.clone(), meta: meta.clone() }
     }
 }
 

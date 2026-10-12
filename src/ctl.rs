@@ -151,6 +151,18 @@ mod tests {
     }
 
     #[test]
+    fn socket_path_of_100_bytes_moves_to_tmp() {
+        let base = std::env::temp_dir().join(format!("rust-sync-sock100-{}", std::process::id()));
+        let pad = 100 - base.as_os_str().len() - "/".len() - "/ctl.sock".len();
+        let state = base.join("a".repeat(pad));
+        assert_eq!(state.join("ctl.sock").as_os_str().len(), 100);
+        let p = socket_path_in(&state).unwrap();
+        let uid = std::fs::metadata(&state).unwrap().uid();
+        assert_eq!(p.parent().unwrap(), Path::new(&format!("/tmp/rust-sync-{uid}")));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
     fn long_state_folder_gets_private_socket_in_tmp() {
         let base = std::env::temp_dir().join(format!("rust-sync-sock-{}", std::process::id()));
         let state = base.join("a".repeat(100));

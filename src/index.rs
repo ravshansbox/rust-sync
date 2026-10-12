@@ -81,6 +81,12 @@ pub struct Entry {
     pub meta: FileMeta,
 }
 
+impl From<(&String, &FileMeta)> for Entry {
+    fn from((path, meta): (&String, &FileMeta)) -> Self {
+        Entry { path: path.clone(), meta: meta.clone() }
+    }
+}
+
 pub type Index = BTreeMap<String, FileMeta>;
 
 pub fn load(path: &Path) -> Index {

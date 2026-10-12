@@ -303,7 +303,7 @@ impl Daemon {
             .index
             .iter()
             .filter(|(p, _)| self.cfg.root_of(p).is_some())
-            .map(|(p, m)| Entry { path: p.clone(), meta: m.clone() })
+            .map(Entry::from)
             .collect();
         for batch in batches(entries) {
             let _ = peer.ctl.send(Msg::Index(batch));
@@ -413,7 +413,7 @@ impl Daemon {
             log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
-            self.outbox.extend(index::under(&self.index, root).map(|(p, m)| Entry { path: p.clone(), meta: m.clone() }));
+            self.outbox.extend(index::under(&self.index, root).map(Entry::from));
         }
         self.broadcast(&Msg::Config(self.cfg.shared.clone()));
         self.dial_all();

@@ -86,7 +86,9 @@ struct Daemon {
     me_short: u64,
     keys: Arc<Keys>,
     cfg: Config,
+    config_file: PathBuf,
     index: Index,
+    index_file: PathBuf,
     peers: HashMap<String, Peer>,
     dialling: HashSet<String>,
     /// Nodes we failed to reach, and how long we wait before the next try.
@@ -127,11 +129,12 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         bail!("a daemon is already running for {}", dir.display());
     }
     let keys = Arc::new(net::load_or_create_keys(dir)?);
-    let mut cfg = Config::load(&paths::config_file())?;
+    let config_file = paths::config_file();
+    let mut cfg = Config::load(&config_file)?;
     if let Some(p) = port {
         cfg.port = p;
     }
-    cfg.save(&paths::config_file())?;
+    cfg.save(&config_file)?;
     let (tx, mut rx) = mpsc::unbounded_channel();
 
     // File watcher. It runs on its own thread and hands raw paths to `debounce`.
@@ -179,7 +182,9 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         me,
         keys,
         cfg,
+        config_file,
         index: index::load(&paths::index_file()),
+        index_file: paths::index_file(),
         peers: HashMap::new(),
         dialling: HashSet::new(),
         backoff: HashMap::new(),
@@ -395,7 +400,7 @@ impl Daemon {
     }
 
     fn config_changed(&mut self, before: &HashSet<String>) {
-        if let Err(e) = self.cfg.save(&paths::config_file()) {
+        if let Err(e) = self.cfg.save(&self.config_file) {
             log!("cannot save config: {e}");
         }
         let gone: Vec<String> = self.peers.extract_if(|id, _| self.cfg.trusted(id).is_none()).map(|(id, _)| id).collect();
@@ -574,7 +579,7 @@ impl Daemon {
         if !self.index_dirty {
             return;
         }
-        match index::save(&self.index, &paths::index_file()) {
+        match index::save(&self.index, &self.index_file) {
             Ok(()) => self.index_dirty = false,
             Err(e) => log!("cannot save index: {e}"),
         }
@@ -1092,7 +1097,9 @@ mod tests {
             me,
             keys,
             cfg: Config::default(),
+            config_file: test_dir("no-state").join("config.json"),
             index: Index::new(),
+            index_file: test_dir("no-state").join("index.bin"),
             peers: HashMap::new(),
             dialling: HashSet::new(),
             backoff: HashMap::new(),
@@ -1319,6 +1326,29 @@ mod tests {
         assert_eq!((resp.ok, resp.text.as_str()), (false, "No such node"));
         assert_eq!(d.cfg.clock, clock);
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn added_path_is_saved_shared_with_peers_and_its_known_entries_are_sent() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("add-path");
+        std::fs::create_dir_all(dir.join("s")).unwrap();
+        d.config_file = dir.join("config.json");
+        let root = dir.join("s").to_str().unwrap().to_string();
+        let known = dir.join("s/gone.txt").to_str().unwrap().to_string();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        d.index.insert(known.clone(), FileMeta { hash: None, ..meta(0, 2) });
+        d.index.insert(dir.join("x").to_str().unwrap().into(), meta(0, 2));
+        let (ctl, mut rx) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "aa".into(), conn: 1, outbound: true, ctl, data: mpsc::channel(1).0 });
+        while rx.try_recv().is_ok() {}
+        let resp = d.on_ctl(&Req::AddPath { path: root.clone(), is_dir: true });
+        assert!(resp.ok, "{}", resp.text);
+        assert!(Config::load(&d.config_file).unwrap().active_root(&root).is_some());
+        assert!(matches!(rx.try_recv(), Ok(Msg::Config(c)) if c.roots.contains_key(&root)));
+        assert_eq!(d.outbox.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(), [known.as_str()]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -1207,6 +1207,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn duplicate_connection_that_is_kept_cancels_downloads_over_the_old_one() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "ff", "h:1", false);
+        let _rx = up(&mut d, "ff", 1);
+        let tmp = test_dir("dup-down");
+        d.downloads.insert("~/s/f".into(), download("ff", meta(0, 0), &tmp));
+        let (ctl, _rx2) = mpsc::unbounded_channel();
+        d.handle(Event::Up { id: "ff".into(), conn: 2, outbound: false, ctl, data: mpsc::channel(1).0 });
+        assert!(tmp.exists());
+        let _rx3 = up(&mut d, "ff", 3);
+        assert!(!tmp.exists());
+        assert!(d.downloads.is_empty());
+    }
+
     #[tokio::test]
     async fn tick_pings_peers_and_dials_offline_nodes_not_waiting_to_retry() {
         let mut d = daemon();

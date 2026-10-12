@@ -484,7 +484,7 @@ impl Daemon {
     }
 
     fn on_fs(&mut self, lp: &Path) {
-        if lp.starts_with(paths::state_dir()) || lp.file_name().and_then(|n| n.to_str()).is_some_and(paths::ignored) {
+        if lp.file_name().and_then(|n| n.to_str()).is_some_and(paths::ignored) {
             return;
         }
         let Some(p) = paths::to_portable(lp) else { return };
@@ -1987,7 +1987,7 @@ mod tests {
     }
 
     #[test]
-    fn tree_check_skips_the_state_folder() {
+    fn tree_checks_and_file_events_skip_the_state_folder() {
         let mut d = daemon();
         let me = d.me.clone();
         let state = paths::state_dir();
@@ -1998,6 +1998,7 @@ mod tests {
         let root = dir.to_str().unwrap().to_string();
         d.cfg.set_root(&me, &root, true, false);
         d.check_tree(&root);
+        d.on_fs(&state.join("index.bin"));
         let notes = dir.join("notes.txt").to_str().unwrap().to_string();
         assert_eq!(d.index.keys().collect::<Vec<_>>(), [&notes]);
         std::fs::remove_file(dir.join("notes.txt")).unwrap();

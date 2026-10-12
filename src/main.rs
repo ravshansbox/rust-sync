@@ -344,6 +344,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn path_add_rejects_missing_special_and_state_paths() {
+        let add = |p: &str| run(Cmd::Path { cmd: PathCmd::Add { path: PathBuf::from(p) } });
+        assert_eq!(add("/no/such/path").await.unwrap_err().to_string(), "cannot find /no/such/path");
+        assert_eq!(add("/dev/null").await.unwrap_err().to_string(), "/dev/null is not a regular file or folder");
+        std::fs::create_dir_all(paths::state_dir()).unwrap();
+        let state = paths::state_dir().to_str().unwrap();
+        assert_eq!(add(state).await.unwrap_err().to_string(), format!("cannot sync {state}"));
+    }
+
+    #[tokio::test]
     async fn send_without_daemon_saves_change_to_config_file() {
         send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
         let cfg = Config::load(&paths::config_file()).unwrap();

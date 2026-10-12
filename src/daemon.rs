@@ -2097,7 +2097,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn trusted_connection_comes_up_carries_messages_and_goes_down() {
+    async fn trusted_connection_comes_up_carries_control_and_data_messages_and_goes_down() {
         let dir = test_dir("up");
         let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
         let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
@@ -2113,12 +2113,15 @@ mod tests {
             let (s, peer) = l.accept().await.unwrap();
             connection_inner(s, peer.ip(), None, b.clone(), b_tx, 5000).await
         };
+        let (got_tx, got_rx) = oneshot::channel();
         let a_side = async {
             let Some(Event::Auth { reply, .. }) = a_rx.recv().await else { panic!() };
             reply.send(true).unwrap();
-            let Some(Event::Up { id, conn, outbound: true, ctl, .. }) = a_rx.recv().await else { panic!() };
+            let Some(Event::Up { id, conn, outbound: true, ctl, data }) = a_rx.recv().await else { panic!() };
             assert_eq!(id, b.id());
             ctl.send(Msg::Unavailable { path: "x".into() }).unwrap();
+            data.send(Msg::Unavailable { path: "y".into() }).await.unwrap();
+            got_rx.await.unwrap();
             drop(ctl);
             let Some(Event::Down { id, conn: down }) = a_rx.recv().await else { panic!() };
             assert_eq!((id, down), (b.id(), conn));
@@ -2131,6 +2134,13 @@ mod tests {
             assert_eq!(id, a.id());
             let Some(Event::Peer { conn: from, msg: Msg::Unavailable { path }, .. }) = b_rx.recv().await else { panic!() };
             assert_eq!((from, path.as_str()), (conn, "x"));
+            let Ok(Some(Event::Peer { msg: Msg::Unavailable { path }, .. })) =
+                timeout(Duration::from_secs(5), b_rx.recv()).await
+            else {
+                panic!("expected the data message")
+            };
+            assert_eq!(path, "y");
+            got_tx.send(()).unwrap();
             let Some(Event::Down { id, conn: down }) = b_rx.recv().await else { panic!() };
             assert_eq!((id, down), (a.id(), conn));
             assert!(b_rx.recv().await.is_none());

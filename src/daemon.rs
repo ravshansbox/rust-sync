@@ -1972,6 +1972,23 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_file_is_not_recorded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("unreadable");
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &root, true, false);
+        let f = dir.join("secret.txt");
+        std::fs::write(&f, "x").unwrap();
+        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o000)).unwrap();
+        d.check_tree(&root);
+        assert!(d.index.is_empty());
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn conflict_name_keeps_extension_and_tags_loser() {
         let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
         assert_eq!(

@@ -1993,6 +1993,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_waits_for_a_free_slot() {
+        let lp = test_dir("upload-slot");
+        std::fs::write(&lp, "x").unwrap();
+        let slots = Arc::new(Semaphore::new(0));
+        let (tx, mut rx) = mpsc::channel(8);
+        let task = tokio::spawn(upload(lp.clone(), "~/f".into(), tx, slots.clone()));
+        assert!(timeout(Duration::from_millis(100), rx.recv()).await.is_err());
+        slots.add_permits(1);
+        assert!(matches!(rx.recv().await, Some(Msg::Data { offset: 0, eof: false, .. })));
+        task.await.unwrap();
+        std::fs::remove_file(&lp).unwrap();
+    }
+
+    #[tokio::test]
     async fn connect_any_falls_back_to_an_address_that_listens_and_fails_when_none_does() {
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = l.local_addr().unwrap().port();

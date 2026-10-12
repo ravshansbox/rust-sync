@@ -64,7 +64,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: NodeCmd,
     },
-    /// Start the daemon at login, or stop doing so.
+    /// Start the daemon at login or boot, or stop doing so.
     Service {
         #[command(subcommand)]
         cmd: ServiceCmd,
@@ -108,7 +108,7 @@ enum ServiceCmd {
         #[arg(long)]
         system: bool,
     },
-    /// Stop the daemon and remove the launchd agent.
+    /// Stop the daemon and remove its launchd agent or system daemon.
     Uninstall,
     /// Start the daemon now.
     Start,

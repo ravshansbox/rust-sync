@@ -1448,6 +1448,33 @@ mod tests {
     }
 
     #[test]
+    fn completed_download_is_written_with_the_senders_mtime_and_mode() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("done");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.sh");
+        let p = lp.to_str().unwrap().to_string();
+        let mut r = meta(1_000_000_000_000_000_000, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.mode = 0o755;
+        r.vv = Vv(vec![(2, 1)]);
+        let tmp = dir.join(".f.sh.rsync-tmp");
+        d.downloads.insert(p.clone(), download("aa", r.clone(), &tmp));
+        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert_eq!(std::fs::read(&lp).unwrap(), b"abc");
+        let s = index::stat(&lp).unwrap();
+        assert_eq!((s.mtime, s.mode), (r.mtime, 0o755));
+        assert!(!tmp.exists());
+        assert_eq!(d.index[&p], r);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_running_download_is_replaced_only_by_a_newer_version() {
         let mut d = daemon();
         let tmp = test_dir("replace");

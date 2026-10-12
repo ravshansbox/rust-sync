@@ -1257,8 +1257,12 @@ mod tests {
         d.tx = tx;
         d.handle(Event::Redial { id: "aa".into() });
         d.handle(Event::Redial { id: "aa".into() });
-        assert!(matches!(rx.recv().await, Some(Event::DialDone { .. })));
+        let done = rx.recv().await.unwrap();
+        assert!(matches!(done, Event::DialDone { .. }));
         assert!(timeout(Duration::from_millis(200), rx.recv()).await.is_err());
+        d.handle(done);
+        d.handle(Event::Redial { id: "aa".into() });
+        assert!(matches!(rx.recv().await, Some(Event::DialDone { .. })));
     }
 
     #[test]

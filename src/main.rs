@@ -213,7 +213,8 @@ async fn send(req: Req) -> anyhow::Result<()> {
         return Ok(());
     }
     let me = my_keys()?.id();
-    let mut cfg = Config::load(&paths::config_file())?;
+    let path = paths::config_file();
+    let mut cfg = Config::load(&path)?;
     match req {
         Req::Status => {
             out!("{}", daemon::status_text(&cfg, &me, |_| None, &BTreeMap::default()));
@@ -227,7 +228,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
         _ => {}
     }
     let text = ctl::apply(&mut cfg, &me, &req).map_err(anyhow::Error::msg)?;
-    cfg.save(&paths::config_file())?;
+    cfg.save(&path)?;
     outln!("{text}\n(The daemon is not running. This takes effect when it starts.)");
     Ok(())
 }

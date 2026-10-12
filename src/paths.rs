@@ -117,6 +117,7 @@ mod tests {
         assert!(ignored(".DS_Store"));
         assert!(!ignored("notes.txt"));
         assert!(!ignored("sub/.DS_Store.bak"));
+        assert!(!ignored("notes.DS_Store"));
     }
 
     #[test]

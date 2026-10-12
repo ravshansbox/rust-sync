@@ -123,6 +123,9 @@ impl Config {
 
 /// Add the default port if the address has none.
 pub fn with_port(addr: &str) -> String {
+    if let Ok(ip) = addr.parse::<std::net::Ipv6Addr>() {
+        return std::net::SocketAddr::from((ip, DEFAULT_PORT)).to_string();
+    }
     match addr.rsplit_once(':') {
         Some((_, p)) if p.parse::<u16>().is_ok() => addr.to_string(),
         _ => format!("{addr}:{DEFAULT_PORT}"),
@@ -144,6 +147,13 @@ mod tests {
         assert_eq!(with_port("[::1]:80"), "[::1]:80");
         assert_eq!(with_port("host:x"), format!("host:x:{DEFAULT_PORT}"));
         assert_eq!(with_port("host:70000"), format!("host:70000:{DEFAULT_PORT}"));
+    }
+
+    #[test]
+    fn with_port_adds_default_to_bare_ipv6_addresses() {
+        assert_eq!(with_port("::1"), format!("[::1]:{DEFAULT_PORT}"));
+        assert_eq!(with_port("fe80::1:2"), format!("[fe80::1:2]:{DEFAULT_PORT}"));
+        assert_eq!(with_port("[::1]"), format!("[::1]:{DEFAULT_PORT}"));
     }
 
     #[test]

@@ -269,6 +269,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handshake_turns_off_nagle_on_both_sides() {
+        let ((br, _bw, _), (ar, _aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
+        assert!(br.r.as_ref().nodelay().unwrap());
+        assert!(ar.r.as_ref().nodelay().unwrap());
+    }
+
+    #[tokio::test]
     async fn handshake_fails_when_peer_sends_garbage_or_closes() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

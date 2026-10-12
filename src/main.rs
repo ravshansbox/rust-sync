@@ -286,6 +286,10 @@ mod tests {
     use super::*;
     use clap::CommandFactory;
 
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("rust-sync").chain(args.iter().copied()))
+    }
+
     #[test]
     fn cli_definition_is_valid() {
         Cli::command().debug_assert();
@@ -293,7 +297,6 @@ mod tests {
 
     #[test]
     fn list_and_remove_aliases_parse() {
-        let parse = |args: &[&str]| Cli::try_parse_from(std::iter::once("rust-sync").chain(args.iter().copied()));
         assert!(matches!(parse(&["path", "ls"]).unwrap().cmd, Cmd::Path { cmd: PathCmd::List }));
         assert!(matches!(parse(&["node", "ls"]).unwrap().cmd, Cmd::Node { cmd: NodeCmd::List }));
         let Cmd::Path { cmd: PathCmd::Remove { path } } = parse(&["path", "rm", "a"]).unwrap().cmd else { panic!() };
@@ -304,7 +307,6 @@ mod tests {
 
     #[test]
     fn path_add_and_commands_without_arguments_parse() {
-        let parse = |args: &[&str]| Cli::try_parse_from(std::iter::once("rust-sync").chain(args.iter().copied()));
         let Cmd::Path { cmd: PathCmd::Add { path } } = parse(&["path", "add", "a"]).unwrap().cmd else { panic!() };
         assert_eq!(path, PathBuf::from("a"));
         assert!(parse(&["path", "add"]).is_err());
@@ -318,26 +320,26 @@ mod tests {
 
     #[test]
     fn node_add_flags_parse() {
-        let cli = Cli::try_parse_from(["rust-sync", "node", "add", "host:1", "--id", "ab", "-y"]).unwrap();
+        let cli = parse(&["node", "add", "host:1", "--id", "ab", "-y"]).unwrap();
         let Cmd::Node { cmd: NodeCmd::Add(a) } = cli.cmd else { panic!() };
         assert_eq!((a.addr.as_str(), a.id.as_deref(), a.yes), ("host:1", Some("ab"), true));
-        let cli = Cli::try_parse_from(["rust-sync", "node", "add", "host"]).unwrap();
+        let cli = parse(&["node", "add", "host"]).unwrap();
         let Cmd::Node { cmd: NodeCmd::Add(a) } = cli.cmd else { panic!() };
         assert_eq!((a.id, a.yes), (None, false));
-        assert!(Cli::try_parse_from(["rust-sync", "node", "add"]).is_err());
+        assert!(parse(&["node", "add"]).is_err());
     }
 
     #[test]
     fn daemon_and_service_install_flags_parse() {
-        let cli = Cli::try_parse_from(["rust-sync", "daemon", "--port", "7000", "--log-file", "x.log"]).unwrap();
+        let cli = parse(&["daemon", "--port", "7000", "--log-file", "x.log"]).unwrap();
         let Cmd::Daemon { port, log_file } = cli.cmd else { panic!() };
         assert_eq!((port, log_file), (Some(7000), Some(PathBuf::from("x.log"))));
-        let Cmd::Daemon { port, log_file } = Cli::try_parse_from(["rust-sync", "daemon"]).unwrap().cmd else { panic!() };
+        let Cmd::Daemon { port, log_file } = parse(&["daemon"]).unwrap().cmd else { panic!() };
         assert_eq!((port, log_file), (None, None));
-        assert!(Cli::try_parse_from(["rust-sync", "daemon", "--port", "70000"]).is_err());
-        let cli = Cli::try_parse_from(["rust-sync", "service", "install", "--system"]).unwrap();
+        assert!(parse(&["daemon", "--port", "70000"]).is_err());
+        let cli = parse(&["service", "install", "--system"]).unwrap();
         assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: true } }));
-        let cli = Cli::try_parse_from(["rust-sync", "service", "install"]).unwrap();
+        let cli = parse(&["service", "install"]).unwrap();
         assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: false } }));
     }
 }

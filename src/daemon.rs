@@ -130,6 +130,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     }
     let keys = Arc::new(net::load_or_create_keys(dir)?);
     let config_file = paths::config_file();
+    let index_file = paths::index_file();
     let mut cfg = Config::load(&config_file)?;
     if let Some(p) = port {
         cfg.port = p;
@@ -183,8 +184,8 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         keys,
         cfg,
         config_file,
-        index: index::load(&paths::index_file()),
-        index_file: paths::index_file(),
+        index: index::load(&index_file),
+        index_file,
         peers: HashMap::new(),
         dialling: HashSet::new(),
         backoff: HashMap::new(),

@@ -586,7 +586,7 @@ impl Daemon {
         e.meta.mode &= 0o777;
         let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
-        if paths::through_symlink(&lp, &root) {
+        if self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || paths::through_symlink(&lp, &root) {
             return;
         }
         if lp.file_name().and_then(|n| n.to_str()).is_none_or(paths::ignored) {
@@ -1928,6 +1928,30 @@ mod tests {
         gone.vv = Vv(vec![(2, 1), (d.me_short, 1)]);
         d.on_entry("aa", Entry { path: root.join("link/f.txt").to_str().unwrap().into(), meta: gone });
         assert!(dir.join("out/f.txt").exists());
+        assert!(d.index.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_entry_for_a_folder_root_itself_is_skipped() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("entry-root");
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = dir.join("s");
+        let p = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &p, true, false);
+        let mut r = meta(0, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert!(!root.is_file());
+        assert!(!dir.join(".s.rsync-tmp").exists());
         assert!(d.index.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }

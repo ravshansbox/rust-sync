@@ -20,8 +20,18 @@ pub fn state_dir() -> &'static Path {
         if cfg!(test) {
             return std::env::temp_dir().canonicalize().unwrap().join(format!("rust-sync-state-{}", std::process::id())).join(".rust-sync");
         }
-        std::env::var_os("RUST_SYNC_HOME").map_or_else(|| home().join(".rust-sync"), PathBuf::from)
+        std::env::var_os("RUST_SYNC_HOME").map_or_else(|| home().join(".rust-sync"), |d| resolve_state_dir(d.into()))
     })
+}
+
+/// Resolve symlinks and `..` in the parent, so `starts_with` checks against
+/// canonical paths match. The folder itself may not exist yet.
+fn resolve_state_dir(dir: PathBuf) -> PathBuf {
+    let dir = std::path::absolute(&dir).unwrap_or(dir);
+    match (dir.parent(), dir.file_name()) {
+        (Some(parent), Some(name)) => parent.canonicalize().map_or(dir.clone(), |p| p.join(name)),
+        _ => dir,
+    }
 }
 
 pub fn config_file() -> PathBuf {
@@ -94,6 +104,18 @@ pub fn ignored(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn state_folder_from_env_is_resolved_through_symlinks() {
+        let tmp = std::env::temp_dir().join(format!("rust-sync-state-env-{}", std::process::id()));
+        std::fs::create_dir_all(tmp.join("real")).unwrap();
+        let _ = std::fs::remove_file(tmp.join("link"));
+        std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        let want = tmp.canonicalize().unwrap().join("real/.rust-sync");
+        assert_eq!(resolve_state_dir(tmp.join("link/.rust-sync")), want);
+        assert_eq!(resolve_state_dir(tmp.join("link/../real/.rust-sync")), want);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
 
     #[test]
     fn state_files_live_in_state_folder() {

@@ -722,12 +722,19 @@ impl Daemon {
 
     fn pump_queue(&mut self) {
         while self.downloads.len() < MAX_DOWNLOADS {
-            let Some((p, (from, r, _))) = self.queued.pop_first() else { break };
+            let Some((p, (from, r, alts))) = self.queued.pop_first() else { break };
             if !self.peers.contains_key(&from) {
                 continue;
             }
+            let hash = r.hash;
             // Decide again: things may have changed while it was queued.
-            self.on_entry(&from, Entry { path: p, meta: r });
+            self.on_entry(&from, Entry { path: p.clone(), meta: r });
+            if let Some(d) = self.downloads.get_mut(&p)
+                && d.from == from
+                && d.meta.hash == hash
+            {
+                d.alts = alts;
+            }
         }
     }
 
@@ -1469,6 +1476,39 @@ mod tests {
         d.pump_queue();
         assert!(matches!(a.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
         assert_eq!(d.downloads[&p].from, "aa");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn queued_download_that_starts_and_loses_its_node_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("started-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (mut a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while a.try_recv().is_ok() {}
+        while b.try_recv().is_ok() {}
+        for n in 0..MAX_DOWNLOADS {
+            d.downloads.insert(format!("{rp}/{n}"), download("aa", meta(0, 0), &dir.join(format!("t{n}"))));
+        }
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        for from in ["aa", "bb"] {
+            d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
+        }
+        d.downloads.clear();
+        d.pump_queue();
+        assert!(matches!(a.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        d.pump_queue();
+        assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "bb");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

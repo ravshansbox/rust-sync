@@ -509,9 +509,10 @@ impl Daemon {
             .map(|(k, _)| k.clone())
             .collect();
         for k in missing {
-            if let Some(l) = paths::to_local(&k) {
-                self.check_file(&k, &l);
-            }
+            let Some(l) = paths::to_local(&k) else { continue };
+            let root = self.cfg.root_of(&k).and_then(paths::to_local);
+            let st = index::stat(&l).filter(|_| !root.is_some_and(|r| paths::through_symlink(&l, &r)));
+            self.check_stat(&k, &l, st);
         }
     }
 
@@ -539,10 +540,14 @@ impl Daemon {
 
     /// Compare one file on disk with the index. Records and announces local changes.
     fn check_file(&mut self, p: &str, lp: &Path) {
+        self.check_stat(p, lp, index::stat(lp));
+    }
+
+    fn check_stat(&mut self, p: &str, lp: &Path, st: Option<index::Stat>) {
         let old = self.index.get(p).cloned();
         let me = self.me_short;
         let bump = |old: &Option<FileMeta>| old.as_ref().map_or_else(Vv::default, |m| m.vv.clone()).bumped(me);
-        let new = match (index::stat(lp), &old) {
+        let new = match (st, &old) {
             (None, None) => return,
             (None, Some(m)) if m.deleted() => return,
             (None, Some(_)) => FileMeta { hash: None, size: 0, mtime: index::now(), mode: 0, vv: bump(&old), by: me },
@@ -1932,6 +1937,26 @@ mod tests {
         d.on_entry("aa", Entry { path: root.join("link/f.txt").to_str().unwrap().into(), meta: gone });
         assert!(dir.join("out/f.txt").exists());
         assert!(d.index.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn synced_folder_replaced_by_a_symlink_is_recorded_as_deleted() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("folder-to-symlink");
+        let root = dir.join("in");
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        std::fs::write(root.join("d/f.txt"), "x").unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.check_tree(&rp);
+        std::fs::remove_dir_all(root.join("d")).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        std::fs::write(dir.join("out/f.txt"), "secret").unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
+        d.check_tree(&rp);
+        assert!(d.index[&format!("{rp}/d/f.txt")].deleted());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

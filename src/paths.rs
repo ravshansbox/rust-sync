@@ -43,7 +43,7 @@ pub fn to_portable(p: &Path) -> Option<String> {
 
 /// Portable string -> absolute local path. Returns `None` for anything unsafe.
 pub fn to_local(portable: &str) -> Option<PathBuf> {
-    if portable.contains('\0') || portable.split('/').any(|c| c == ".." || c == ".") {
+    if portable.contains('\0') || portable.contains("//") || portable.split('/').any(|c| c == ".." || c == ".") {
         return None;
     }
     let p = if portable == "~" {
@@ -130,6 +130,7 @@ mod tests {
         assert_eq!(to_local("/a\0b"), None);
         assert_eq!(to_local("relative/path"), None);
         assert_eq!(to_local("~other/x"), None);
+        assert_eq!(to_local("~//etc/x"), None);
     }
 
     #[test]

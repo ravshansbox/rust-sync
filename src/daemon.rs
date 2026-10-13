@@ -609,10 +609,12 @@ impl Daemon {
             Action::Same => self.adopt(p, lp, local, r),
             Action::Take | Action::Conflict if same_content => self.adopt(p, lp, local, r),
             Action::Take | Action::Conflict if r.deleted() => {
-                match std::fs::remove_file(lp) {
-                    Ok(()) => log!("deleted {p}"),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return log!("cannot delete {p}: {e}"),
+                if local.as_ref().is_some_and(|l| !l.deleted()) {
+                    match std::fs::remove_file(lp) {
+                        Ok(()) => log!("deleted {p}"),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(e) => return log!("cannot delete {p}: {e}"),
+                    }
                 }
                 self.set_entry(p, r);
             }
@@ -1929,6 +1931,24 @@ mod tests {
         d.on_entry("aa", Entry { path: root.join("link/f.txt").to_str().unwrap().into(), meta: gone });
         assert!(dir.join("out/f.txt").exists());
         assert!(d.index.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_does_not_remove_a_local_symlink_that_was_never_synced() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("delete-symlink");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(dir.join("target.txt"), "x").unwrap();
+        std::os::unix::fs::symlink(dir.join("target.txt"), root.join("f.txt")).unwrap();
+        d.cfg.set_root(&me, root.to_str().unwrap(), true, false);
+        let mut gone = meta(0, 2);
+        gone.hash = None;
+        gone.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: root.join("f.txt").to_str().unwrap().into(), meta: gone });
+        assert!(std::fs::symlink_metadata(root.join("f.txt")).unwrap().is_symlink());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

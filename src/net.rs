@@ -32,7 +32,7 @@ pub enum Msg {
     Index(Vec<Entry>),
     Request { path: String, hash: [u8; 32] },
     Data { path: String, hash: [u8; 32], offset: u64, bytes: Vec<u8>, eof: bool },
-    Unavailable { path: String },
+    Unavailable { path: String, hash: [u8; 32] },
     /// Keeps the connection alive, so a dead peer is noticed.
     Ping,
 }
@@ -296,8 +296,8 @@ mod tests {
         let ((mut br, _bw, b_sees), (_ar, mut aw, a_sees)) = connect(&a, &b).await;
         assert_eq!(b_sees, a.id());
         assert_eq!(a_sees, b.id());
-        aw.send(&Msg::Unavailable { path: "~/x".into() }).await.unwrap();
-        assert!(matches!(br.recv().await.unwrap(), Msg::Unavailable { path } if path == "~/x"));
+        aw.send(&Msg::Unavailable { path: "~/x".into(), hash: [3; 32] }).await.unwrap();
+        assert!(matches!(br.recv().await.unwrap(), Msg::Unavailable { path, hash } if path == "~/x" && hash == [3; 32]));
     }
 
     #[tokio::test]

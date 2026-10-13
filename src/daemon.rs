@@ -375,8 +375,8 @@ impl Daemon {
             Msg::Index(entries) => entries.into_iter().for_each(|e| self.on_entry(from, e)),
             Msg::Request { path, hash } => self.on_request(from, path, hash),
             Msg::Data { path, hash, offset, bytes, eof } => self.on_data(from, &path, hash, offset, &bytes, eof),
-            Msg::Unavailable { path } => {
-                if self.downloads.get(&path).is_some_and(|d| d.from == from) {
+            Msg::Unavailable { path, hash } => {
+                if self.downloads.get(&path).is_some_and(|d| d.from == from && d.meta.hash == Some(hash)) {
                     self.cancel_download(&path);
                 }
             }
@@ -761,7 +761,7 @@ impl Daemon {
         let safe = |lp: &Path| index::stat(lp).is_some() && !root.is_some_and(|r| paths::through_symlink(lp, &r));
         match paths::to_local(&path) {
             Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, path, hash, peer.data.clone(), self.uploads.clone()))),
-            _ => drop(peer.ctl.send(Msg::Unavailable { path })),
+            _ => drop(peer.ctl.send(Msg::Unavailable { path, hash })),
         }
     }
 }
@@ -1056,7 +1056,7 @@ async fn connection_inner(
 async fn upload(lp: PathBuf, path: String, hash: [u8; 32], tx: mpsc::Sender<Msg>, slots: Arc<Semaphore>) {
     let Ok(_slot) = slots.acquire().await else { return };
     let Ok(mut f) = File::open(&lp) else {
-        let _ = tx.send(Msg::Unavailable { path }).await;
+        let _ = tx.send(Msg::Unavailable { path, hash }).await;
         return;
     };
     let mut buf = vec![0u8; net::CHUNK];
@@ -1065,7 +1065,7 @@ async fn upload(lp: PathBuf, path: String, hash: [u8; 32], tx: mpsc::Sender<Msg>
         let msg = match f.read(&mut buf) {
             Ok(0) => Msg::Data { path: path.clone(), hash, offset, bytes: Vec::new(), eof: true },
             Ok(n) => Msg::Data { path: path.clone(), hash, offset, bytes: buf[..n].to_vec(), eof: false },
-            Err(_) => Msg::Unavailable { path: path.clone() },
+            Err(_) => Msg::Unavailable { path: path.clone(), hash },
         };
         let done = !matches!(msg, Msg::Data { eof: false, .. });
         if let Msg::Data { bytes, .. } = &msg {
@@ -1389,7 +1389,7 @@ mod tests {
         while rx.try_recv().is_ok() {}
         for (path, hash) in [("~/s/f", [2; 32]), ("~/x", [1; 32])] {
             d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.into(), hash } });
-            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p }) if p == path));
+            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p, .. }) if p == path));
         }
     }
 
@@ -1416,7 +1416,7 @@ mod tests {
         while rx.try_recv().is_ok() {}
         for path in [format!("{rp}/d/f"), format!("{rp}/g")] {
             d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.clone(), hash } });
-            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p }) if p == path), "{path}");
+            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p, .. }) if p == path), "{path}");
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1529,7 +1529,7 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_cancels_a_download_only_when_sent_by_its_source() {
+    fn unavailable_cancels_a_download_only_when_sent_by_its_source_for_the_same_version() {
         let mut d = daemon();
         let me = d.me.clone();
         for (id, conn) in [("aa", 1), ("bb", 2)] {
@@ -1538,9 +1538,12 @@ mod tests {
         }
         let tmp = test_dir("unavailable");
         d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
-        d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: Msg::Unavailable { path: "~/s/f".into() } });
+        let unavailable = |hash| Msg::Unavailable { path: "~/s/f".into(), hash };
+        d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: unavailable([1; 32]) });
         assert!(tmp.exists());
-        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Unavailable { path: "~/s/f".into() } });
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: unavailable([2; 32]) });
+        assert!(tmp.exists());
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: unavailable([1; 32]) });
         assert!(!tmp.exists());
     }
 
@@ -2525,7 +2528,7 @@ mod tests {
         assert_eq!(got, data);
         std::fs::remove_file(&lp).unwrap();
         upload(lp, "~/f".into(), [2; 32], tx, Arc::new(Semaphore::new(1))).await;
-        assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path }) if path == "~/f"));
+        assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path, .. }) if path == "~/f"));
         assert!(rx.recv().await.is_none());
     }
 
@@ -2674,8 +2677,8 @@ mod tests {
             reply.send(true).unwrap();
             let Some(Event::Up { id, conn, outbound: true, ctl, data }) = a_rx.recv().await else { panic!() };
             assert_eq!(id, b.id());
-            ctl.send(Msg::Unavailable { path: "x".into() }).unwrap();
-            data.send(Msg::Unavailable { path: "y".into() }).await.unwrap();
+            ctl.send(Msg::Unavailable { path: "x".into(), hash: [0; 32] }).unwrap();
+            data.send(Msg::Unavailable { path: "y".into(), hash: [0; 32] }).await.unwrap();
             got_rx.await.unwrap();
             drop(ctl);
             let Some(Event::Down { id, conn: down }) = a_rx.recv().await else { panic!() };
@@ -2687,9 +2690,9 @@ mod tests {
             reply.send(true).unwrap();
             let Some(Event::Up { id, conn, outbound: false, ctl: _ctl, .. }) = b_rx.recv().await else { panic!() };
             assert_eq!(id, a.id());
-            let Some(Event::Peer { conn: from, msg: Msg::Unavailable { path }, .. }) = b_rx.recv().await else { panic!() };
+            let Some(Event::Peer { conn: from, msg: Msg::Unavailable { path, .. }, .. }) = b_rx.recv().await else { panic!() };
             assert_eq!((from, path.as_str()), (conn, "x"));
-            let Ok(Some(Event::Peer { msg: Msg::Unavailable { path }, .. })) =
+            let Ok(Some(Event::Peer { msg: Msg::Unavailable { path, .. }, .. })) =
                 timeout(Duration::from_secs(5), b_rx.recv()).await
             else {
                 panic!("expected the data message")
@@ -2751,7 +2754,7 @@ mod tests {
             w.send(&Msg::Hello { port: 4000, probe: false, trusts_you: true }).await.unwrap();
             r.recv().await.unwrap();
             stopped_rx.await.unwrap();
-            w.send(&Msg::Unavailable { path: "x".into() }).await.unwrap();
+            w.send(&Msg::Unavailable { path: "x".into(), hash: [0; 32] }).await.unwrap();
             (r, w)
         };
         let listener = async {

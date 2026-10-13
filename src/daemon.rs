@@ -637,7 +637,12 @@ impl Daemon {
             Action::Take | Action::Conflict if r.deleted() => {
                 if local.as_ref().is_some_and(|l| !l.deleted()) {
                     match std::fs::remove_file(lp) {
-                        Ok(()) => log!("deleted {p}"),
+                        Ok(()) => {
+                            log!("deleted {p}");
+                            if let Some(root) = self.cfg.root_of(p).and_then(paths::to_local) {
+                                let _ = lp.ancestors().skip(1).take_while(|a| *a != root && a.starts_with(&root)).try_for_each(std::fs::remove_dir);
+                            }
+                        }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                         Err(e) => return log!("cannot delete {p}: {e}"),
                     }
@@ -2675,6 +2680,54 @@ mod tests {
         d.on_entry("aa", Entry { path: fp.clone(), meta: r });
         assert!(!root.join("f").exists());
         assert!(d.index[&fp].deleted());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_of_the_last_file_in_a_folder_removes_the_empty_folders_but_not_the_root() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("deletion-empties-folders");
+        let root = dir.join("s");
+        std::fs::create_dir_all(root.join("a/b")).unwrap();
+        std::fs::create_dir_all(root.join("c")).unwrap();
+        std::fs::write(root.join("a/b/f"), "x").unwrap();
+        std::fs::write(root.join("c/g"), "y").unwrap();
+        let p = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &p, true, false);
+        d.check_tree(&p);
+        for f in ["a/b/f", "c/g"] {
+            let fp = format!("{p}/{f}");
+            let mut r = d.index[&fp].clone();
+            r.hash = None;
+            r.vv = r.vv.bumped(2);
+            d.on_entry("aa", Entry { path: fp, meta: r });
+        }
+        assert!(!root.join("a").exists());
+        assert!(!root.join("c").exists());
+        assert!(root.is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_keeps_a_folder_that_still_has_files() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("deletion-keeps-folder");
+        let root = dir.join("s");
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        std::fs::write(root.join("a/f"), "x").unwrap();
+        std::fs::write(root.join("a/other"), "y").unwrap();
+        let p = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &p, true, false);
+        d.check_tree(&p);
+        let fp = format!("{p}/a/f");
+        let mut r = d.index[&fp].clone();
+        r.hash = None;
+        r.vv = r.vv.bumped(2);
+        d.on_entry("aa", Entry { path: fp, meta: r });
+        assert!(!root.join("a/f").exists());
+        assert!(root.join("a/other").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

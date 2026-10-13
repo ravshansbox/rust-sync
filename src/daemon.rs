@@ -379,7 +379,8 @@ impl Daemon {
             Msg::Data { path, hash, offset, bytes, eof } => self.on_data(from, &path, hash, offset, &bytes, eof),
             Msg::Unavailable { path, hash } => {
                 if self.downloads.get(&path).is_some_and(|d| d.from == from && d.meta.hash == Some(hash)) {
-                    self.cancel_download(&path);
+                    let d = self.downloads.remove(&path).unwrap();
+                    self.retry_elsewhere(path, d, from);
                 }
             }
         }
@@ -788,11 +789,18 @@ impl Daemon {
             }
             fallback(alts).map(|alt| *from = alt).is_some()
         });
-        for (p, mut d) in self.downloads.extract_if(|_, d| d.from == id) {
-            let _ = std::fs::remove_file(d.tmp);
-            if let Some(alt) = fallback(&mut d.alts) {
-                self.queued.entry(p).or_insert((alt, d.meta, d.alts));
-            }
+        let gone: Vec<_> = self.downloads.extract_if(|_, d| d.from == id).collect();
+        for (p, d) in gone {
+            self.retry_elsewhere(p, d, id);
+        }
+    }
+
+    fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
+        let _ = std::fs::remove_file(&d.tmp);
+        d.alts.retain(|a| a != gone && self.peers.contains_key(a));
+        if !d.alts.is_empty() {
+            let alt = d.alts.remove(0);
+            self.queued.entry(p).or_insert((alt, d.meta, d.alts));
         }
     }
 
@@ -1698,6 +1706,33 @@ mod tests {
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Config(theirs.shared) });
         let resp = d.on_ctl(&Req::ListNodes);
         assert!(resp.text.contains("AÉÉÉÉ  h:2"), "{}", resp.text);
+    }
+
+    #[tokio::test]
+    async fn download_refused_by_its_node_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("refused-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (_a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while b.try_recv().is_ok() {}
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        let hash = r.hash.unwrap();
+        for from in ["aa", "bb"] {
+            d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
+        }
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Unavailable { path: p.clone(), hash } });
+        d.pump_queue();
+        assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "bb");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

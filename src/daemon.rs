@@ -1969,6 +1969,27 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_same_content_with_another_mode_keeps_the_mode_of_the_conflict_winner() {
+        let dir = test_dir("concurrent-mode");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.sh");
+        std::fs::write(&lp, "same").unwrap();
+        for (local_mtime, remote_mtime, want) in [(9, 5, 0o755), (5, 9, 0o644)] {
+            let mut d = daemon();
+            std::fs::set_permissions(&lp, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let mut local = meta(local_mtime, 1);
+            (local.mode, local.vv) = (0o755, Vv(vec![(1, 1)]));
+            d.index.insert("~/s/f.sh".into(), local);
+            let mut r = meta(remote_mtime, 2);
+            r.vv = Vv(vec![(2, 1)]);
+            d.apply("aa", "~/s/f.sh", &lp, r, None);
+            assert_eq!(std::fs::metadata(&lp).unwrap().permissions().mode() & 0o777, want);
+            assert_eq!(d.index["~/s/f.sh"].mode, want);
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn downloaded_conflict_loser_changes_nothing_and_removes_the_temp_file() {
         let mut d = daemon();
         let dir = test_dir("local-wins");

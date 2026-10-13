@@ -149,7 +149,7 @@ pub enum Action {
     Conflict,
     /// Both changed. Our version wins, so we keep it as it is.
     LocalWins,
-    /// Both changed to the same content. Adopt the combined version history.
+    /// Both changed to the same content and mode. Adopt the combined version history.
     Same,
 }
 
@@ -158,7 +158,7 @@ pub fn decide(local: Option<&FileMeta>, remote: &FileMeta) -> Action {
     match l.vv.compare(&remote.vv) {
         Order::Equal | Order::Newer => Action::Nothing,
         Order::Older => Action::Take,
-        Order::Concurrent if l.hash == remote.hash => Action::Same,
+        Order::Concurrent if l.hash == remote.hash && l.mode == remote.mode => Action::Same,
         Order::Concurrent if remote_wins(l, remote) => Action::Conflict,
         Order::Concurrent => Action::LocalWins,
     }

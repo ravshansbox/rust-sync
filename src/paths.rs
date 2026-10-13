@@ -20,13 +20,13 @@ pub fn state_dir() -> &'static Path {
         if cfg!(test) {
             return std::env::temp_dir().canonicalize().unwrap().join(format!("rust-sync-state-{}", std::process::id())).join(".rust-sync");
         }
-        std::env::var_os("RUST_SYNC_HOME").map_or_else(|| home().join(".rust-sync"), |d| resolve_state_dir(d.into()))
+        std::env::var_os("RUST_SYNC_HOME").map_or_else(|| home().join(".rust-sync"), |d| resolve_parent(d.into()))
     })
 }
 
 /// Resolve symlinks and `..` in the parent, so `starts_with` checks against
-/// canonical paths match. The folder itself may not exist yet.
-fn resolve_state_dir(dir: PathBuf) -> PathBuf {
+/// canonical paths match. The path itself may not exist.
+pub fn resolve_parent(dir: PathBuf) -> PathBuf {
     let dir = std::path::absolute(&dir).unwrap_or(dir);
     match (dir.parent(), dir.file_name()) {
         (Some(parent), Some(name)) => parent.canonicalize().map_or(dir.clone(), |p| p.join(name)),
@@ -112,8 +112,8 @@ mod tests {
         let _ = std::fs::remove_file(tmp.join("link"));
         std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
         let want = tmp.canonicalize().unwrap().join("real/.rust-sync");
-        assert_eq!(resolve_state_dir(tmp.join("link/.rust-sync")), want);
-        assert_eq!(resolve_state_dir(tmp.join("link/../real/.rust-sync")), want);
+        assert_eq!(resolve_parent(tmp.join("link/.rust-sync")), want);
+        assert_eq!(resolve_parent(tmp.join("link/../real/.rust-sync")), want);
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 

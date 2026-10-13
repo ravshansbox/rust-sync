@@ -162,10 +162,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Path { cmd: PathCmd::Remove { path } } => {
-            // The path may be gone already, so do not require it to exist.
-            let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| std::path::absolute(&path).unwrap_or(path));
-            let portable = paths::to_portable(&abs).context("path is not valid UTF-8")?;
-            send(Req::RemovePath { path: portable }).await
+            send(Req::RemovePath { path: removal_path(path)? }).await
         }
         Cmd::Node { cmd: NodeCmd::Add(a) } => node_add(a).await,
         Cmd::Node { cmd: NodeCmd::List } => send(Req::ListNodes).await,
@@ -186,6 +183,12 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+fn removal_path(path: PathBuf) -> anyhow::Result<String> {
+    // The path may be gone already, so do not require it to exist.
+    let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| paths::resolve_parent(path));
+    paths::to_portable(&abs).context("path is not valid UTF-8")
 }
 
 fn write_stdout(args: std::fmt::Arguments) {
@@ -389,6 +392,18 @@ mod tests {
         let want = format!("that is not the ID you gave ({}). Node not added.", net::pretty_id(&expected));
         assert_eq!(result.unwrap_err().to_string(), want);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn removal_path_of_a_deleted_path_resolves_symlinks_and_dot_dot() {
+        let tmp = std::env::temp_dir().join(format!("rust-sync-rm-path-{}", std::process::id()));
+        std::fs::create_dir_all(tmp.join("real")).unwrap();
+        let _ = std::fs::remove_file(tmp.join("link"));
+        std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        let want = paths::to_portable(&tmp.canonicalize().unwrap().join("real/gone")).unwrap();
+        assert_eq!(removal_path(tmp.join("link/gone")).unwrap(), want);
+        assert_eq!(removal_path(tmp.join("link/../real/gone")).unwrap(), want);
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[tokio::test]

@@ -50,11 +50,11 @@ impl Keys {
 
 pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
     let path = dir.join("key");
-    if let Ok(b) = std::fs::read(&path) {
-        if b.len() == 64 {
-            return Ok(Keys { private: b[..32].to_vec(), public: b[32..].to_vec() });
-        }
-        bail!("{} is damaged", path.display());
+    match std::fs::read(&path) {
+        Ok(b) if b.len() == 64 => return Ok(Keys { private: b[..32].to_vec(), public: b[32..].to_vec() }),
+        Ok(_) => bail!("{} is damaged", path.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).with_context(|| format!("cannot read {}", path.display())),
     }
     let keys = generate_keys()?;
     std::fs::create_dir_all(dir)?;
@@ -249,6 +249,15 @@ mod tests {
         assert!(load_or_create_keys(&dir).is_err());
         std::fs::write(&path, [0u8; 65]).unwrap();
         assert!(load_or_create_keys(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn load_or_create_keys_fails_when_key_exists_but_cannot_be_read() {
+        let dir = std::env::temp_dir().join(format!("rust-sync-keys-unreadable-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("key")).unwrap();
+        assert!(load_or_create_keys(&dir).is_err());
+        assert!(dir.join("key").is_dir());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

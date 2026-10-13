@@ -4,7 +4,7 @@
 
 use crate::config::{self, Config, Shared};
 use crate::ctl::{self, Req, Resp};
-use crate::index::{self, Action, Entry, FileMeta, Index, Order, Vv};
+use crate::index::{self, Action, Entry, FileMeta, Index, Vv};
 use crate::net::{self, Keys, Msg};
 use crate::log::{self, log};
 use crate::paths;
@@ -99,7 +99,7 @@ struct Daemon {
     /// IDs in `pending`, oldest first.
     pending_order: VecDeque<String>,
     downloads: HashMap<String, Download>,
-    queued: BTreeMap<String, (String, FileMeta)>,
+    queued: BTreeMap<String, (String, FileMeta, Vec<String>)>,
     uploads: Arc<Semaphore>,
     watcher: RecommendedWatcher,
     watched: HashMap<PathBuf, RecursiveMode>,
@@ -688,9 +688,19 @@ impl Daemon {
             self.cancel_download(p);
         }
         if self.downloads.len() >= MAX_DOWNLOADS {
-            if self.queued.get(p).is_none_or(|(_, q)| q.vv.compare(&r.vv) != Order::Newer && index::decide(Some(q), &r) != Action::LocalWins) {
-                self.queued.insert(p.to_string(), (from.to_string(), r));
+            if let Some((qfrom, q, alts)) = self.queued.get_mut(p) {
+                match index::decide(Some(q), &r) {
+                    Action::Nothing => {
+                        if qfrom != from && q.hash == r.hash && !alts.iter().any(|a| a == from) {
+                            alts.push(from.to_string());
+                        }
+                        return;
+                    }
+                    Action::LocalWins => return,
+                    _ => {}
+                }
             }
+            self.queued.insert(p.to_string(), (from.to_string(), r, Vec::new()));
             return;
         }
         let Some(peer) = self.peers.get(from) else { return };
@@ -712,7 +722,7 @@ impl Daemon {
 
     fn pump_queue(&mut self) {
         while self.downloads.len() < MAX_DOWNLOADS {
-            let Some((p, (from, r))) = self.queued.pop_first() else { break };
+            let Some((p, (from, r, _))) = self.queued.pop_first() else { break };
             if !self.peers.contains_key(&from) {
                 continue;
             }
@@ -760,11 +770,21 @@ impl Daemon {
     }
 
     fn drop_downloads_from(&mut self, id: &str) {
-        self.queued.retain(|_, (from, _)| from != id);
-        for (p, d) in self.downloads.extract_if(|_, d| d.from == id) {
+        let peers = &self.peers;
+        let fallback = |alts: &mut Vec<String>| {
+            alts.retain(|a| a != id && peers.contains_key(a));
+            (!alts.is_empty()).then(|| alts.remove(0))
+        };
+        self.queued.retain(|_, (from, _, alts)| {
+            if from != id {
+                return true;
+            }
+            fallback(alts).map(|alt| *from = alt).is_some()
+        });
+        for (p, mut d) in self.downloads.extract_if(|_, d| d.from == id) {
             let _ = std::fs::remove_file(d.tmp);
-            if let Some(alt) = d.alts.into_iter().find(|a| a != id && self.peers.contains_key(a)) {
-                self.queued.entry(p).or_insert((alt, d.meta));
+            if let Some(alt) = fallback(&mut d.alts) {
+                self.queued.entry(p).or_insert((alt, d.meta, d.alts));
             }
         }
     }
@@ -1421,6 +1441,37 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    #[tokio::test]
+    async fn queued_download_from_a_node_that_goes_down_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("queued-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (mut a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while a.try_recv().is_ok() {}
+        while b.try_recv().is_ok() {}
+        for n in 0..MAX_DOWNLOADS {
+            d.downloads.insert(format!("{rp}/{n}"), download("aa", meta(0, 0), &dir.join(format!("t{n}"))));
+        }
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        for from in ["aa", "bb"] {
+            d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
+        }
+        d.downloads.clear();
+        d.handle(Event::Down { id: "bb".into(), conn: 2 });
+        d.pump_queue();
+        assert!(matches!(a.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "aa");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn file_with_a_name_of_the_longest_allowed_length_is_downloaded() {
         let mut d = daemon();
@@ -1527,7 +1578,7 @@ mod tests {
         d.index.insert("~/s/b".into(), meta(0, 0));
         d.index.insert("~/s/gone".into(), FileMeta { hash: None, ..meta(0, 0) });
         d.index.insert("~/x".into(), meta(0, 0));
-        d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0)));
+        d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0), Vec::new()));
         let text = d.on_ctl(&Req::Status).text;
         assert!(text.contains("\nFiles tracked: 2\nTransfers: 0 active, 1 queued\n"), "{text}");
     }
@@ -1580,7 +1631,7 @@ mod tests {
             let rx = up(&mut d, id, conn);
             rxs.push(rx);
         }
-        d.queued.insert("~/s/f".into(), ("bb".into(), meta(0, 0)));
+        d.queued.insert("~/s/f".into(), ("bb".into(), meta(0, 0), Vec::new()));
         let old = d.cfg.shared.clone();
         let mut theirs = Config { clock: d.cfg.clock, ..Config::default() };
         theirs.set_node("aa", "bb", "h:1", true);
@@ -1782,9 +1833,9 @@ mod tests {
         for n in 0..MAX_DOWNLOADS {
             d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &tmp));
         }
-        let queued = |d: &Daemon| d.queued.get("~/s/f").map(|(from, m)| (from.clone(), m.vv.clone()));
+        let queued = |d: &Daemon| d.queued.get("~/s/f").map(|(from, m, _)| (from.clone(), m.vv.clone()));
         let mut r = meta(0, 0);
-        for (from, n, want) in [("aa", 2, ("aa", 2)), ("bb", 1, ("aa", 2)), ("bb", 2, ("bb", 2)), ("cc", 3, ("cc", 3))] {
+        for (from, n, want) in [("aa", 2, ("aa", 2)), ("bb", 1, ("aa", 2)), ("bb", 2, ("aa", 2)), ("cc", 3, ("cc", 3))] {
             r.vv = Vv(vec![(1, n)]);
             d.start_download(from, "~/s/f", r.clone());
             assert_eq!(queued(&d), Some((want.0.to_string(), Vv(vec![(1, want.1)]))));
@@ -1804,7 +1855,7 @@ mod tests {
         let loser = FileMeta { hash: Some([2; 32]), vv: Vv(vec![(2, 1)]), ..meta(1, 2) };
         d.start_download("aa", "~/s/f", winner.clone());
         d.start_download("bb", "~/s/f", loser);
-        assert_eq!(d.queued.get("~/s/f"), Some(&("aa".to_string(), winner)));
+        assert_eq!(d.queued.get("~/s/f"), Some(&("aa".to_string(), winner, Vec::new())));
         std::fs::remove_file(tmp).unwrap();
     }
 
@@ -1815,8 +1866,8 @@ mod tests {
         for n in 0..MAX_DOWNLOADS {
             d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &tmp));
         }
-        d.queued.insert("~/s/f".into(), ("aa".into(), meta(0, 0)));
-        d.queued.insert("~/s/g".into(), ("bb".into(), meta(0, 0)));
+        d.queued.insert("~/s/f".into(), ("aa".into(), meta(0, 0), Vec::new()));
+        d.queued.insert("~/s/g".into(), ("bb".into(), meta(0, 0), Vec::new()));
         d.pump_queue();
         assert_eq!(d.queued.len(), 2);
         d.cancel_download("~/s/0");

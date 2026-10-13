@@ -674,7 +674,7 @@ impl Daemon {
 
     fn start_download(&mut self, from: &str, p: &str, r: FileMeta) {
         if let Some(d) = self.downloads.get(p) {
-            if d.meta.vv.compare(&r.vv) != Order::Older {
+            if !matches!(index::decide(Some(&d.meta), &r), Action::Take | Action::Conflict) {
                 return;
             }
             self.cancel_download(p);
@@ -1644,6 +1644,29 @@ mod tests {
         d.start_download("aa", "~/s/f", r);
         assert!(!tmp.exists());
         assert!(d.downloads.is_empty());
+    }
+
+    #[test]
+    fn running_download_is_replaced_by_a_concurrent_version_that_wins_the_conflict() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-concurrent");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (_a, _b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        let p = format!("{rp}/f");
+        let version = |data: &[u8], mtime, node| FileMeta { hash: Some(*blake3::hash(data).as_bytes()), size: data.len() as u64, vv: Vv(vec![(node, 1)]), ..meta(mtime, node) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: version(b"loser", 1_000_000_000, 1) });
+        d.on_entry("bb", Entry { path: p.clone(), meta: version(b"winner", 2_000_000_000, 2) });
+        d.on_data("aa", &p, 0, b"loser", true);
+        d.on_data("bb", &p, 0, b"winner", true);
+        assert_eq!(std::fs::read(root.join("f")).unwrap(), b"winner");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

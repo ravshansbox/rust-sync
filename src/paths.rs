@@ -25,13 +25,21 @@ pub fn state_dir() -> &'static Path {
 }
 
 /// Resolve symlinks and `..` in the parent, so `starts_with` checks against
-/// canonical paths match. The path itself may not exist.
+/// canonical paths match. The path itself, and folders above it, may not exist.
 pub fn resolve_parent(dir: PathBuf) -> PathBuf {
     let dir = std::path::absolute(&dir).unwrap_or(dir);
-    match (dir.parent(), dir.file_name()) {
-        (Some(parent), Some(name)) => parent.canonicalize().map_or(dir.clone(), |p| p.join(name)),
-        _ => dir,
+    for base in dir.ancestors().skip(1) {
+        let Ok(mut p) = base.canonicalize() else { continue };
+        for part in dir.strip_prefix(base).unwrap_or(&dir).components() {
+            match part {
+                std::path::Component::ParentDir => drop(p.pop()),
+                std::path::Component::CurDir => {}
+                _ => p.push(part),
+            }
+        }
+        return p;
     }
+    dir
 }
 
 pub fn config_file() -> PathBuf {
@@ -114,6 +122,19 @@ mod tests {
         let want = tmp.canonicalize().unwrap().join("real/.rust-sync");
         assert_eq!(resolve_parent(tmp.join("link/.rust-sync")), want);
         assert_eq!(resolve_parent(tmp.join("link/../real/.rust-sync")), want);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn state_folder_from_env_is_resolved_when_its_parent_folders_do_not_exist_yet() {
+        let tmp = std::env::temp_dir().join(format!("rust-sync-state-env-new-{}", std::process::id()));
+        std::fs::create_dir_all(tmp.join("real")).unwrap();
+        let _ = std::fs::remove_file(tmp.join("link"));
+        std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        let want = tmp.canonicalize().unwrap().join("real/new/dir/.rust-sync");
+        assert_eq!(resolve_parent(tmp.join("link/new/dir/.rust-sync")), want);
+        assert_eq!(resolve_parent(tmp.join("link/new/gone/../dir/.rust-sync")), want);
+        assert_eq!(resolve_parent(tmp.join("link/gone/../../real/new/dir/.rust-sync")), want);
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 

@@ -639,13 +639,7 @@ impl Daemon {
                     match std::fs::remove_file(lp) {
                         Ok(()) => {
                             log!("deleted {p}");
-                            if let Some(root) = self.cfg.root_of(p).and_then(paths::to_local) {
-                                let _ = lp
-                                    .ancestors()
-                                    .skip(1)
-                                    .take_while(|a| a.starts_with(&root) && paths::to_portable(a).is_none_or(|ap| self.cfg.active_root(&ap).is_none()))
-                                    .try_for_each(std::fs::remove_dir);
-                            }
+                            self.remove_empty_parents(p, lp);
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                         Err(e) => return log!("cannot delete {p}: {e}"),
@@ -685,6 +679,17 @@ impl Daemon {
         }
         if let Some(t) = tmp {
             let _ = std::fs::remove_file(t);
+            self.remove_empty_parents(p, lp);
+        }
+    }
+
+    fn remove_empty_parents(&self, p: &str, lp: &Path) {
+        if let Some(root) = self.cfg.root_of(p).and_then(paths::to_local) {
+            let _ = lp
+                .ancestors()
+                .skip(1)
+                .take_while(|a| a.starts_with(&root) && paths::to_portable(a).is_none_or(|ap| self.cfg.active_root(&ap).is_none()))
+                .try_for_each(std::fs::remove_dir);
         }
     }
 
@@ -2709,6 +2714,31 @@ mod tests {
         }
         assert!(!root.join("a").exists());
         assert!(!root.join("c").exists());
+        assert!(root.is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn download_dropped_after_a_remote_deletion_removes_the_folders_it_created() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("dropped-download-folders");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let p = format!("{rp}/a/b/f");
+        let hash = *blake3::hash(b"abc").as_bytes();
+        let r = FileMeta { hash: Some(hash), size: 3, vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: r.clone() });
+        assert!(root.join("a/b").is_dir());
+        d.on_entry("aa", Entry { path: p.clone(), meta: FileMeta { hash: None, size: 0, vv: Vv(vec![(1, 2)]), ..r } });
+        let msg = Msg::Data { path: p, hash, offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert!(!root.join("a").exists());
         assert!(root.is_dir());
         std::fs::remove_dir_all(&dir).unwrap();
     }

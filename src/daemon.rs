@@ -608,7 +608,7 @@ impl Daemon {
     }
 
     /// Act on a remote version of `p`. `tmp` holds its content once downloaded.
-    fn apply(&mut self, from: &str, p: &str, lp: &Path, r: FileMeta, mut tmp: Option<PathBuf>) {
+    fn apply(&mut self, from: &str, p: &str, lp: &Path, mut r: FileMeta, mut tmp: Option<PathBuf>) {
         let local = self.index.get(p).cloned();
         let action = index::decide(local.as_ref(), &r);
         let same_content = local.as_ref().is_some_and(|l| l.hash == r.hash);
@@ -648,6 +648,9 @@ impl Daemon {
                         return log!("cannot write {p}: {e}");
                     }
                     log!("updated {p}");
+                    if let (Action::Conflict, Some(l)) = (&action, &local) {
+                        r.vv = l.vv.merged(&r.vv);
+                    }
                     self.set_entry(p, r);
                 }
             },
@@ -1843,6 +1846,27 @@ mod tests {
     }
 
     #[test]
+    fn downloaded_conflict_winner_is_sent_on_as_newer_than_both_versions() {
+        let mut d = daemon();
+        let dir = test_dir("conflict-history");
+        std::fs::create_dir_all(&dir).unwrap();
+        let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
+        std::fs::write(&lp, "mine").unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 3)]);
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let mut r = meta(1, 2);
+        r.hash = Some([2; 32]);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp));
+        let sent = &d.outbox[0].meta;
+        assert_eq!(index::decide(Some(&local), sent), Action::Take);
+        assert_eq!(index::decide(Some(&r), sent), Action::Take);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn downloaded_change_that_beats_a_local_deletion_restores_the_file() {
         let mut d = daemon();
         let dir = test_dir("restore");
@@ -1857,6 +1881,7 @@ mod tests {
         d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp));
         assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        r.vv = Vv(vec![(1, 1), (2, 1)]);
         assert_eq!(d.index["~/s/f.txt"], r);
         assert_eq!(d.outbox.len(), 1);
         std::fs::remove_dir_all(&dir).unwrap();

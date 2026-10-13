@@ -374,7 +374,7 @@ impl Daemon {
             Msg::Config(shared) => self.on_config(&shared),
             Msg::Index(entries) => entries.into_iter().for_each(|e| self.on_entry(from, e)),
             Msg::Request { path, hash } => self.on_request(from, path, hash),
-            Msg::Data { path, offset, bytes, eof } => self.on_data(from, &path, offset, &bytes, eof),
+            Msg::Data { path, hash, offset, bytes, eof } => self.on_data(from, &path, hash, offset, &bytes, eof),
             Msg::Unavailable { path } => {
                 if self.downloads.get(&path).is_some_and(|d| d.from == from) {
                     self.cancel_download(&path);
@@ -709,9 +709,9 @@ impl Daemon {
         }
     }
 
-    fn on_data(&mut self, from: &str, path: &str, offset: u64, bytes: &[u8], eof: bool) {
+    fn on_data(&mut self, from: &str, path: &str, hash: [u8; 32], offset: u64, bytes: &[u8], eof: bool) {
         let Some(d) = self.downloads.get_mut(path) else { return };
-        if d.from != from {
+        if d.from != from || d.meta.hash != Some(hash) {
             return;
         }
         if offset != d.written || d.written + bytes.len() as u64 > d.meta.size || d.file.write_all(bytes).is_err() {
@@ -760,7 +760,7 @@ impl Daemon {
         let ok = root.is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
         let safe = |lp: &Path| index::stat(lp).is_some() && !root.is_some_and(|r| paths::through_symlink(lp, &r));
         match paths::to_local(&path) {
-            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, path, peer.data.clone(), self.uploads.clone()))),
+            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, path, hash, peer.data.clone(), self.uploads.clone()))),
             _ => drop(peer.ctl.send(Msg::Unavailable { path })),
         }
     }
@@ -1053,7 +1053,7 @@ async fn connection_inner(
 }
 
 /// Send one file in chunks. Waits when the peer's send queue is full.
-async fn upload(lp: PathBuf, path: String, tx: mpsc::Sender<Msg>, slots: Arc<Semaphore>) {
+async fn upload(lp: PathBuf, path: String, hash: [u8; 32], tx: mpsc::Sender<Msg>, slots: Arc<Semaphore>) {
     let Ok(_slot) = slots.acquire().await else { return };
     let Ok(mut f) = File::open(&lp) else {
         let _ = tx.send(Msg::Unavailable { path }).await;
@@ -1063,8 +1063,8 @@ async fn upload(lp: PathBuf, path: String, tx: mpsc::Sender<Msg>, slots: Arc<Sem
     let mut offset = 0u64;
     loop {
         let msg = match f.read(&mut buf) {
-            Ok(0) => Msg::Data { path: path.clone(), offset, bytes: Vec::new(), eof: true },
-            Ok(n) => Msg::Data { path: path.clone(), offset, bytes: buf[..n].to_vec(), eof: false },
+            Ok(0) => Msg::Data { path: path.clone(), hash, offset, bytes: Vec::new(), eof: true },
+            Ok(n) => Msg::Data { path: path.clone(), hash, offset, bytes: buf[..n].to_vec(), eof: false },
             Err(_) => Msg::Unavailable { path: path.clone() },
         };
         let done = !matches!(msg, Msg::Data { eof: false, .. });
@@ -1554,7 +1554,7 @@ mod tests {
         }
         let tmp = test_dir("data");
         d.downloads.insert("~/s/f".into(), download("aa", FileMeta { size: 5, ..meta(0, 0) }, &tmp));
-        let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), offset, bytes: bytes.to_vec(), eof: false };
+        let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), hash: [1; 32], offset, bytes: bytes.to_vec(), eof: false };
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: data(0, b"xx") });
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(0, b"abc") });
         assert_eq!(std::fs::read(&tmp).unwrap(), b"abc");
@@ -1570,7 +1570,7 @@ mod tests {
         up(&mut d, "aa", 1);
         let tmp = test_dir("mismatch");
         d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
-        let msg = Msg::Data { path: "~/s/f".into(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: "~/s/f".into(), hash: [1; 32], offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(d.downloads.is_empty());
         assert!(!tmp.exists());
@@ -1593,7 +1593,7 @@ mod tests {
         r.vv = Vv(vec![(2, 1)]);
         let tmp = dir.join(".f.sh.rsync-tmp");
         d.downloads.insert(p.clone(), download("aa", r.clone(), &tmp));
-        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert_eq!(std::fs::read(&lp).unwrap(), b"abc");
         let s = index::stat(&lp).unwrap();
@@ -1619,7 +1619,7 @@ mod tests {
         r.vv = Vv(vec![(2, 1)]);
         let tmp = dir.join(".f.rsync-tmp");
         d.downloads.insert(p.clone(), download("aa", r, &tmp));
-        let msg = Msg::Data { path: p, offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: p, hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert_eq!(std::fs::read(&lp).unwrap(), b"abc");
         assert_eq!(index::stat(&lp).unwrap().mtime, 0);
@@ -1663,9 +1663,31 @@ mod tests {
         let version = |data: &[u8], mtime, node| FileMeta { hash: Some(*blake3::hash(data).as_bytes()), size: data.len() as u64, vv: Vv(vec![(node, 1)]), ..meta(mtime, node) };
         d.on_entry("aa", Entry { path: p.clone(), meta: version(b"loser", 1_000_000_000, 1) });
         d.on_entry("bb", Entry { path: p.clone(), meta: version(b"winner", 2_000_000_000, 2) });
-        d.on_data("aa", &p, 0, b"loser", true);
-        d.on_data("bb", &p, 0, b"winner", true);
+        d.on_data("aa", &p, *blake3::hash(b"loser").as_bytes(), 0, b"loser", true);
+        d.on_data("bb", &p, *blake3::hash(b"winner").as_bytes(), 0, b"winner", true);
         assert_eq!(std::fs::read(root.join("f")).unwrap(), b"winner");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn running_download_replaced_by_a_newer_version_ignores_data_from_the_old_upload() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-stale-upload");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        let p = format!("{rp}/f");
+        let version = |data: &[u8], n| FileMeta { hash: Some(*blake3::hash(data).as_bytes()), size: data.len() as u64, vv: Vv(vec![(2, n)]), ..meta(0, 2) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: version(b"old!", 1) });
+        d.on_data("aa", &p, *blake3::hash(b"old!").as_bytes(), 0, b"ol", false);
+        d.on_entry("aa", Entry { path: p.clone(), meta: version(b"new", 2) });
+        d.on_data("aa", &p, *blake3::hash(b"old!").as_bytes(), 2, b"d!", false);
+        d.on_data("aa", &p, *blake3::hash(b"new").as_bytes(), 0, b"new", true);
+        assert_eq!(std::fs::read(root.join("f")).unwrap(), b"new");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1763,7 +1785,7 @@ mod tests {
         let mut theirs = d.cfg.clone();
         theirs.set_root("aa", &rp, true, true);
         d.on_config(&theirs.shared);
-        d.on_data("aa", &p, 0, data, true);
+        d.on_data("aa", &p, *blake3::hash(data).as_bytes(), 0, data, true);
         assert!(!root.join("f").exists());
         assert!(!root.join(".f.rsync-tmp").exists());
         std::fs::remove_dir_all(&dir).unwrap();
@@ -1786,7 +1808,7 @@ mod tests {
         d.on_entry("aa", Entry { path: p.clone(), meta: r });
         std::fs::rename(root.join("d"), dir.join("out")).unwrap();
         std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
-        d.on_data("aa", &p, 0, data, true);
+        d.on_data("aa", &p, *blake3::hash(data).as_bytes(), 0, data, true);
         assert!(!dir.join("out/f").exists());
         assert!(!dir.join("out/.f.rsync-tmp").exists());
         assert!(d.index.is_empty());
@@ -2140,7 +2162,7 @@ mod tests {
         r.size = 3;
         r.vv = Vv(vec![(2, 1)]);
         d.on_entry("aa", Entry { path: p.clone(), meta: r });
-        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(!root.is_file());
         assert!(!dir.join(".s.rsync-tmp").exists());
@@ -2164,7 +2186,7 @@ mod tests {
         r.size = 3;
         r.vv = Vv(vec![(2, 1)]);
         d.on_entry("aa", Entry { path: p.clone(), meta: r });
-        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(!root.exists());
         assert!(d.index.is_empty());
@@ -2187,7 +2209,7 @@ mod tests {
         r.mode = 0o7755;
         r.vv = Vv(vec![(2, 1)]);
         d.on_entry("aa", Entry { path: p.clone(), meta: r });
-        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         let mode = std::fs::metadata(&p).unwrap().permissions().mode();
         assert_eq!(mode & 0o7777, 0o755);
@@ -2213,7 +2235,7 @@ mod tests {
         r.vv = Vv(vec![(2, 1)]);
         d.on_entry("aa", Entry { path: p.clone(), meta: r });
         assert!(dir.join(".f.rsync-tmp").exists());
-        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abcd".to_vec(), eof: false };
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abcd".to_vec(), eof: false };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(!dir.join(".f.rsync-tmp").exists());
         std::fs::remove_dir_all(&dir).unwrap();
@@ -2493,16 +2515,16 @@ mod tests {
         let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();
         std::fs::write(&lp, &data).unwrap();
         let (tx, mut rx) = mpsc::channel(8);
-        upload(lp.clone(), "~/f".into(), tx.clone(), Arc::new(Semaphore::new(1))).await;
+        upload(lp.clone(), "~/f".into(), [2; 32], tx.clone(), Arc::new(Semaphore::new(1))).await;
         let mut got = Vec::new();
         for (want_offset, want_len, want_eof) in [(0, net::CHUNK, false), (net::CHUNK, 5, false), (net::CHUNK + 5, 0, true)] {
-            let Some(Msg::Data { path, offset, bytes, eof }) = rx.recv().await else { panic!() };
-            assert_eq!((path.as_str(), offset, bytes.len(), eof), ("~/f", want_offset as u64, want_len, want_eof));
+            let Some(Msg::Data { path, hash, offset, bytes, eof }) = rx.recv().await else { panic!() };
+            assert_eq!((path.as_str(), hash, offset, bytes.len(), eof), ("~/f", [2; 32], want_offset as u64, want_len, want_eof));
             got.extend(bytes);
         }
         assert_eq!(got, data);
         std::fs::remove_file(&lp).unwrap();
-        upload(lp, "~/f".into(), tx, Arc::new(Semaphore::new(1))).await;
+        upload(lp, "~/f".into(), [2; 32], tx, Arc::new(Semaphore::new(1))).await;
         assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path }) if path == "~/f"));
         assert!(rx.recv().await.is_none());
     }
@@ -2513,7 +2535,7 @@ mod tests {
         std::fs::write(&lp, "x").unwrap();
         let slots = Arc::new(Semaphore::new(0));
         let (tx, mut rx) = mpsc::channel(8);
-        let task = tokio::spawn(upload(lp.clone(), "~/f".into(), tx, slots.clone()));
+        let task = tokio::spawn(upload(lp.clone(), "~/f".into(), [2; 32], tx, slots.clone()));
         assert!(timeout(Duration::from_millis(100), rx.recv()).await.is_err());
         slots.add_permits(1);
         assert!(matches!(rx.recv().await, Some(Msg::Data { offset: 0, eof: false, .. })));

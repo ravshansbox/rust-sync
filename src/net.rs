@@ -31,7 +31,7 @@ pub enum Msg {
     Config(Shared),
     Index(Vec<Entry>),
     Request { path: String, hash: [u8; 32] },
-    Data { path: String, offset: u64, bytes: Vec<u8>, eof: bool },
+    Data { path: String, hash: [u8; 32], offset: u64, bytes: Vec<u8>, eof: bool },
     Unavailable { path: String },
     /// Keeps the connection alive, so a dead peer is noticed.
     Ping,
@@ -338,8 +338,8 @@ mod tests {
     #[tokio::test]
     async fn send_accepts_largest_message_and_rejects_one_byte_more() {
         let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
-        let data = |n| Msg::Data { path: "~/x".into(), offset: 0, bytes: vec![0; n], eof: true };
-        let n = MAX_MSG - 10;
+        let data = |n| Msg::Data { path: "~/x".into(), hash: [0; 32], offset: 0, bytes: vec![0; n], eof: true };
+        let n = MAX_MSG - 42;
         assert_eq!(postcard::to_stdvec(&data(n)).unwrap().len(), MAX_MSG);
         aw.send(&data(n)).await.unwrap();
         assert!(matches!(br.recv().await.unwrap(), Msg::Data { bytes, .. } if bytes.len() == n));
@@ -350,7 +350,7 @@ mod tests {
     async fn send_delivers_full_chunk_with_long_path() {
         let ((mut br, _bw, _), (_ar, mut aw, _)) = connect(&generate_keys().unwrap(), &generate_keys().unwrap()).await;
         let path = format!("~/{}", "p".repeat(4096));
-        let msg = Msg::Data { path: path.clone(), offset: u64::MAX, bytes: vec![9; CHUNK], eof: true };
+        let msg = Msg::Data { path: path.clone(), hash: [0; 32], offset: u64::MAX, bytes: vec![9; CHUNK], eof: true };
         aw.send(&msg).await.unwrap();
         let got = br.recv().await.unwrap();
         assert!(matches!(got, Msg::Data { path: p, bytes, .. } if p == path && bytes == vec![9; CHUNK]));

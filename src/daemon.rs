@@ -696,7 +696,11 @@ impl Daemon {
         let Some(peer) = self.peers.get(from) else { return };
         let Some(lp) = paths::to_local(p) else { return };
         let (Some(parent), Some(name)) = (lp.parent(), lp.file_name()) else { return };
-        let tmp = parent.join(format!(".{}.rsync-tmp", name.to_string_lossy()));
+        let mut tmp_name = format!(".{}.rsync-tmp", name.to_string_lossy());
+        if tmp_name.len() > 255 {
+            tmp_name = format!(".{}.rsync-tmp", blake3::hash(name.as_encoded_bytes()).to_hex());
+        }
+        let tmp = parent.join(tmp_name);
         let file = match std::fs::create_dir_all(parent).and_then(|()| File::create(&tmp)) {
             Ok(f) => f,
             Err(e) => return log!("cannot create {}: {e}", tmp.display()),
@@ -1411,6 +1415,30 @@ mod tests {
         d.pump_queue();
         assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
         assert_eq!(d.downloads[&p].from, "bb");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn file_with_a_name_of_the_longest_allowed_length_is_downloaded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-long-name");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let p = format!("{rp}/{}", "n".repeat(255));
+        let hash = *blake3::hash(b"abc").as_bytes();
+        let r = FileMeta { hash: Some(hash), size: 3, vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        assert!(matches!(a.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        let msg = Msg::Data { path: p.clone(), hash, offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert_eq!(std::fs::read(&p).unwrap(), b"abc");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

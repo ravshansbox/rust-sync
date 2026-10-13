@@ -388,8 +388,8 @@ impl Daemon {
 
     // ---- Shared config ----
 
-    fn active_roots(&self) -> HashSet<String> {
-        self.cfg.active_roots().map(|(r, _)| r.clone()).collect()
+    fn active_roots(&self) -> HashSet<(String, bool)> {
+        self.cfg.active_roots().map(|(r, e)| (r.clone(), e.is_dir)).collect()
     }
 
     fn on_config(&mut self, shared: &Shared) {
@@ -399,7 +399,7 @@ impl Daemon {
         }
     }
 
-    fn config_changed(&mut self, before: &HashSet<String>) {
+    fn config_changed(&mut self, before: &HashSet<(String, bool)>) {
         if let Err(e) = self.cfg.save(&self.config_file) {
             log!("cannot save config: {e}");
         }
@@ -411,7 +411,7 @@ impl Daemon {
             let _ = std::fs::remove_file(d.tmp);
         }
         self.reconcile_watches();
-        for root in self.active_roots().difference(before) {
+        for (root, _) in self.active_roots().difference(before) {
             log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
@@ -484,7 +484,7 @@ impl Daemon {
     }
 
     fn rescan_all(&mut self) {
-        for r in self.active_roots() {
+        for (r, _) in self.active_roots() {
             self.check_tree(&r);
         }
     }
@@ -1680,6 +1680,28 @@ mod tests {
         assert!(Config::load(&d.config_file).unwrap().active_root(&root).is_some());
         assert!(matches!(rx.try_recv(), Ok(Msg::Config(c)) if c.roots.contains_key(&root)));
         assert_eq!(d.outbox.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(), [known.as_str()]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn files_in_a_folder_are_recorded_when_a_synced_file_path_is_added_again_as_a_folder() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("file-root-becomes-folder");
+        std::fs::create_dir_all(&dir).unwrap();
+        d.config_file = dir.join("config.json");
+        let root = dir.join("x").to_str().unwrap().to_string();
+        std::fs::write(&root, "a").unwrap();
+        d.cfg.set_root(&me, &root, false, false);
+        d.check_tree(&root);
+        std::fs::remove_file(&root).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(dir.join("x/f"), "b").unwrap();
+        d.check_tree(&root);
+        let resp = d.on_ctl(&Req::AddPath { path: root.clone(), is_dir: true });
+        assert!(resp.ok, "{}", resp.text);
+        let f = dir.join("x/f").to_str().unwrap().to_string();
+        assert!(d.index.get(&f).is_some_and(|m| !m.deleted()));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

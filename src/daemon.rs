@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -827,9 +827,9 @@ impl Daemon {
         let Some(peer) = self.peers.get(from) else { return };
         let root = self.cfg.root_of(&path).and_then(paths::to_local);
         let ok = root.is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
-        let safe = |lp: &Path| index::stat(lp).is_some() && !root.is_some_and(|r| paths::through_symlink(lp, &r));
+        let safe = |lp: &Path| index::stat(lp).is_some() && !root.as_ref().is_some_and(|r| paths::through_symlink(lp, r));
         match paths::to_local(&path) {
-            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, path, hash, peer.data.clone(), self.uploads.clone()))),
+            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, root, path, hash, peer.data.clone(), self.uploads.clone()))),
             _ => drop(peer.ctl.send(Msg::Unavailable { path, hash })),
         }
     }
@@ -1125,9 +1125,13 @@ async fn connection_inner(
 }
 
 /// Send one file in chunks. Waits when the peer's send queue is full.
-async fn upload(lp: PathBuf, path: String, hash: [u8; 32], tx: mpsc::Sender<Msg>, slots: Arc<Semaphore>) {
+async fn upload(lp: PathBuf, root: Option<PathBuf>, path: String, hash: [u8; 32], tx: mpsc::Sender<Msg>, slots: Arc<Semaphore>) {
     let Ok(_slot) = slots.acquire().await else { return };
-    let Ok(mut f) = File::open(&lp) else {
+    let opened = File::open(&lp).ok().filter(|f| {
+        let (Ok(a), Ok(b)) = (f.metadata(), std::fs::symlink_metadata(&lp)) else { return false };
+        b.is_file() && (a.dev(), a.ino()) == (b.dev(), b.ino()) && !root.as_ref().is_some_and(|r| paths::through_symlink(&lp, r))
+    });
+    let Some(mut f) = opened else {
         let _ = tx.send(Msg::Unavailable { path, hash }).await;
         return;
     };
@@ -3050,7 +3054,7 @@ mod tests {
         let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();
         std::fs::write(&lp, &data).unwrap();
         let (tx, mut rx) = mpsc::channel(8);
-        upload(lp.clone(), "~/f".into(), [2; 32], tx.clone(), Arc::new(Semaphore::new(1))).await;
+        upload(lp.clone(), None, "~/f".into(), [2; 32], tx.clone(), Arc::new(Semaphore::new(1))).await;
         let mut got = Vec::new();
         for (want_offset, want_len, want_eof) in [(0, net::CHUNK, false), (net::CHUNK, 5, false), (net::CHUNK + 5, 0, true)] {
             let Some(Msg::Data { path, hash, offset, bytes, eof }) = rx.recv().await else { panic!() };
@@ -3059,7 +3063,7 @@ mod tests {
         }
         assert_eq!(got, data);
         std::fs::remove_file(&lp).unwrap();
-        upload(lp, "~/f".into(), [2; 32], tx, Arc::new(Semaphore::new(1))).await;
+        upload(lp, None, "~/f".into(), [2; 32], tx, Arc::new(Semaphore::new(1))).await;
         assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path, .. }) if path == "~/f"));
         assert!(rx.recv().await.is_none());
     }
@@ -3070,12 +3074,39 @@ mod tests {
         std::fs::write(&lp, "x").unwrap();
         let slots = Arc::new(Semaphore::new(0));
         let (tx, mut rx) = mpsc::channel(8);
-        let task = tokio::spawn(upload(lp.clone(), "~/f".into(), [2; 32], tx, slots.clone()));
+        let task = tokio::spawn(upload(lp.clone(), None, "~/f".into(), [2; 32], tx, slots.clone()));
         assert!(timeout(Duration::from_millis(100), rx.recv()).await.is_err());
         slots.add_permits(1);
         assert!(matches!(rx.recv().await, Some(Msg::Data { offset: 0, eof: false, .. })));
         task.await.unwrap();
         std::fs::remove_file(&lp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn waiting_upload_of_a_file_replaced_by_a_symlink_is_refused() {
+        let dir = test_dir("upload-swap");
+        let (root, outside) = (dir.join("s"), dir.join("secret"));
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        std::fs::write(&outside, "secret").unwrap();
+        for lp in [root.join("f"), root.join("d/g")] {
+            std::fs::write(&lp, "x").unwrap();
+            let slots = Arc::new(Semaphore::new(0));
+            let (tx, mut rx) = mpsc::channel(8);
+            let task = tokio::spawn(upload(lp.clone(), Some(root.clone()), "~/f".into(), [2; 32], tx, slots.clone()));
+            tokio::task::yield_now().await;
+            if lp.ends_with("f") {
+                std::fs::remove_file(&lp).unwrap();
+                std::os::unix::fs::symlink(&outside, &lp).unwrap();
+            } else {
+                std::fs::rename(root.join("d"), dir.join("moved")).unwrap();
+                std::os::unix::fs::symlink(&dir, root.join("d")).unwrap();
+                std::fs::write(dir.join("g"), "secret").unwrap();
+            }
+            slots.add_permits(1);
+            assert!(matches!(rx.recv().await, Some(Msg::Unavailable { .. })), "{}", lp.display());
+            task.await.unwrap();
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]

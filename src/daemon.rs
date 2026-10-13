@@ -732,6 +732,10 @@ impl Daemon {
         let _ = d.file.set_permissions(std::fs::Permissions::from_mode(d.meta.mode));
         drop(d.file);
         let Some(lp) = paths::to_local(path) else { return };
+        if self.cfg.root_of(path).and_then(paths::to_local).is_some_and(|r| paths::through_symlink(&lp, &r)) {
+            let _ = std::fs::remove_file(&d.tmp);
+            return;
+        }
         self.check_file(path, &lp);
         self.apply(from, path, &lp, d.meta, Some(d.tmp));
     }
@@ -1693,6 +1697,30 @@ mod tests {
         d.on_data("aa", &p, 0, data, true);
         assert!(!root.join("f").exists());
         assert!(!root.join(".f.rsync-tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn running_download_is_not_written_through_a_folder_replaced_by_a_symlink() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-symlink");
+        let root = dir.join("s");
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        let p = format!("{rp}/d/f");
+        let data = b"abc";
+        let r = FileMeta { hash: Some(*blake3::hash(data).as_bytes()), size: 3, ..meta(0, 0) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        std::fs::rename(root.join("d"), dir.join("out")).unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
+        d.on_data("aa", &p, 0, data, true);
+        assert!(!dir.join("out/f").exists());
+        assert!(!dir.join("out/.f.rsync-tmp").exists());
+        assert!(d.index.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

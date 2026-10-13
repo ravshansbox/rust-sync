@@ -756,9 +756,11 @@ impl Daemon {
 
     fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
         let Some(peer) = self.peers.get(from) else { return };
-        let ok = self.cfg.root_of(&path).is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
+        let root = self.cfg.root_of(&path).and_then(paths::to_local);
+        let ok = root.is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
+        let safe = |lp: &Path| index::stat(lp).is_some() && !root.is_some_and(|r| paths::through_symlink(lp, &r));
         match paths::to_local(&path) {
-            Some(lp) if ok => drop(tokio::spawn(upload(lp, path, peer.data.clone(), self.uploads.clone()))),
+            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, path, peer.data.clone(), self.uploads.clone()))),
             _ => drop(peer.ctl.send(Msg::Unavailable { path })),
         }
     }
@@ -1389,6 +1391,34 @@ mod tests {
             d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.into(), hash } });
             assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p }) if p == path));
         }
+    }
+
+    #[tokio::test]
+    async fn request_is_refused_for_a_file_reached_through_a_symlink() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("request-symlink");
+        let root = dir.join("s");
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        std::fs::write(dir.join("secret"), "abc").unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let hash = *blake3::hash(b"abc").as_bytes();
+        let synced = FileMeta { hash: Some(hash), size: 3, ..meta(0, 0) };
+        d.index.insert(format!("{rp}/d/f"), synced.clone());
+        d.index.insert(format!("{rp}/g"), synced);
+        std::fs::rename(root.join("d"), dir.join("out")).unwrap();
+        std::fs::copy(dir.join("secret"), dir.join("out/f")).unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
+        std::os::unix::fs::symlink(dir.join("secret"), root.join("g")).unwrap();
+        let mut rx = up(&mut d, "aa", 1);
+        while rx.try_recv().is_ok() {}
+        for path in [format!("{rp}/d/f"), format!("{rp}/g")] {
+            d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.clone(), hash } });
+            assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p }) if p == path), "{path}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

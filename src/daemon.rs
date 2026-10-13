@@ -557,6 +557,12 @@ impl Daemon {
         let new = match (st, &old) {
             (None, None) => return,
             (None, Some(m)) if m.deleted() => return,
+            (None, Some(_))
+                if std::fs::symlink_metadata(lp)
+                    .is_err_and(|e| !matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory)) =>
+            {
+                return;
+            }
             (None, Some(_)) => FileMeta { hash: None, size: 0, mtime: index::now(), mode: 0, vv: bump(&old), by: me },
             (Some(s), Some(m)) if !m.deleted() && (m.size, m.mtime, m.mode) == (s.size, s.mtime, s.mode) => return,
             (Some(s), _) => {
@@ -2461,6 +2467,26 @@ mod tests {
         std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
         d.check_tree(&rp);
         assert!(d.index[&format!("{rp}/d/f.txt")].deleted());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn files_in_a_folder_that_cannot_be_opened_are_not_recorded_as_deleted() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("folder-no-access");
+        let root = dir.join("in");
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        std::fs::write(root.join("d/f.txt"), "x").unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.check_tree(&rp);
+        d.outbox.clear();
+        std::fs::set_permissions(root.join("d"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        d.check_tree(&rp);
+        std::fs::set_permissions(root.join("d"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(!d.index[&format!("{rp}/d/f.txt")].deleted());
+        assert!(d.outbox.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

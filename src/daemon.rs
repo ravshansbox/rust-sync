@@ -755,8 +755,7 @@ impl Daemon {
         let d = self.downloads.remove(path).unwrap();
         if Some(*d.hasher.finalize().as_bytes()) != d.meta.hash {
             log!("{path} changed while being sent; will retry");
-            let _ = std::fs::remove_file(&d.tmp);
-            return;
+            return self.retry_elsewhere(path.to_string(), d, from);
         }
         let when = UNIX_EPOCH + Duration::from_nanos(d.meta.mtime.max(0).cast_unsigned());
         let _ = d.file.set_modified(when);
@@ -1729,6 +1728,34 @@ mod tests {
             d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
         }
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Unavailable { path: p.clone(), hash } });
+        d.pump_queue();
+        assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "bb");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn download_with_wrong_content_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("mismatch-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (_a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while b.try_recv().is_ok() {}
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        let hash = r.hash.unwrap();
+        for from in ["aa", "bb"] {
+            d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
+        }
+        let data = Msg::Data { path: p.clone(), hash, offset: 0, bytes: b"x".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data });
         d.pump_queue();
         assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
         assert_eq!(d.downloads[&p].from, "bb");

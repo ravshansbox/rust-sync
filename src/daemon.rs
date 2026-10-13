@@ -411,8 +411,14 @@ impl Daemon {
         for id in gone {
             self.drop_downloads_from(&id);
         }
-        for (_, d) in self.downloads.extract_if(|p, _| self.cfg.root_of(p).is_none()) {
-            let _ = std::fs::remove_file(d.tmp);
+        let unwanted: Vec<String> = self
+            .downloads
+            .keys()
+            .filter(|p| self.cfg.root_of(p).is_none() || self.cfg.active_root(p).is_some_and(|r| r.is_dir) || self.below_file_root(p))
+            .cloned()
+            .collect();
+        for p in unwanted {
+            self.cancel_download(&p);
         }
         self.reconcile_watches();
         for (root, _) in self.active_roots().difference(before) {
@@ -2196,6 +2202,32 @@ mod tests {
         d.on_data("aa", &p, *blake3::hash(data).as_bytes(), 0, data, true);
         assert!(!root.join("f").exists());
         assert!(!root.join(".f.rsync-tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn running_download_is_dropped_when_a_peer_starts_syncing_its_path_as_a_folder() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-becomes-root");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        let p = format!("{rp}/f");
+        let data = b"abc";
+        let r = FileMeta { hash: Some(*blake3::hash(data).as_bytes()), size: 3, ..meta(0, 0) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        assert!(root.join(".f.rsync-tmp").exists());
+        let mut theirs = d.cfg.clone();
+        theirs.set_root("aa", &p, true, false);
+        d.on_config(&theirs.shared);
+        d.on_data("aa", &p, *blake3::hash(data).as_bytes(), 0, data, true);
+        assert!(root.join("f").is_dir());
+        assert!(!root.join(".f.rsync-tmp").exists());
+        assert!(!d.index.contains_key(&p));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

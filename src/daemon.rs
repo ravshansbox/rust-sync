@@ -365,7 +365,9 @@ impl Daemon {
 
     /// Send the index entries that changed while handling the last event.
     fn flush(&mut self) {
-        for batch in batches(std::mem::take(&mut self.outbox)) {
+        let mut entries = std::mem::take(&mut self.outbox);
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        for batch in batches(entries) {
             self.broadcast(&Msg::Index(batch));
         }
     }
@@ -1702,6 +1704,34 @@ mod tests {
         assert!(resp.ok, "{}", resp.text);
         let f = dir.join("x/f").to_str().unwrap().to_string();
         assert!(d.index.get(&f).is_some_and(|m| !m.deleted()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn deletion_of_a_synced_file_is_sent_before_the_files_of_the_folder_that_replaced_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut rx = up(&mut d, "aa", 1);
+        let dir = test_dir("file-replaced-by-folder-order");
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = dir.join("x").to_str().unwrap().to_string();
+        std::fs::write(&root, "a").unwrap();
+        d.cfg.set_root(&me, &root, false, false);
+        d.check_tree(&root);
+        d.outbox.clear();
+        std::fs::remove_file(&root).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(dir.join("x/f"), "b").unwrap();
+        d.cfg.set_root(&me, &root, true, false);
+        d.check_tree(&root);
+        while rx.try_recv().is_ok() {}
+        d.flush();
+        let mut sent = Vec::new();
+        while let Ok(Msg::Index(b)) = rx.try_recv() {
+            sent.extend(b.into_iter().map(|e| e.path));
+        }
+        assert_eq!(sent, [root.clone(), format!("{root}/f")]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

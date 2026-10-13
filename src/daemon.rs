@@ -506,10 +506,11 @@ impl Daemon {
         let mut seen = HashSet::new();
         match std::fs::symlink_metadata(&lp) {
             Ok(m) if m.is_dir() => self.walk(&lp, &mut seen),
-            _ => {
+            _ if !self.below_file_root(p) => {
                 self.check_file(p, &lp);
                 seen.insert(p.to_string());
             }
+            _ => {}
         }
         let missing: Vec<String> = index::under(&self.index, p)
             .filter(|(k, _)| !seen.contains(*k))
@@ -538,11 +539,16 @@ impl Daemon {
                 self.walk(&path, seen);
             } else if ft.is_file()
                 && let Some(p) = paths::to_portable(&path)
+                && !self.below_file_root(&p)
             {
                 self.check_file(&p, &path);
                 seen.insert(p);
             }
         }
+    }
+
+    fn below_file_root(&self, p: &str) -> bool {
+        self.cfg.active_roots().any(|(r, re)| !re.is_dir && r != p && paths::is_under(p, r))
     }
 
     /// Compare one file on disk with the index. Records and announces local changes.
@@ -604,8 +610,7 @@ impl Daemon {
         e.meta.mode &= 0o777;
         let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
-        let below_file_root = self.cfg.active_roots().any(|(r, re)| !re.is_dir && *r != e.path && paths::is_under(&e.path, r));
-        if self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || below_file_root || paths::through_symlink(&lp, &root) {
+        if self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || self.below_file_root(&e.path) || paths::through_symlink(&lp, &root) {
             return;
         }
         if lp.file_name().and_then(|n| n.to_str()).is_none_or(paths::ignored) {
@@ -2467,6 +2472,21 @@ mod tests {
         std::os::unix::fs::symlink(dir.join("out"), root.join("d")).unwrap();
         d.check_tree(&rp);
         assert!(d.index[&format!("{rp}/d/f.txt")].deleted());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn files_in_a_folder_that_replaced_a_synced_file_are_not_recorded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("file-to-folder");
+        std::fs::create_dir_all(dir.join("f")).unwrap();
+        std::fs::write(dir.join("f/x.txt"), "x").unwrap();
+        let fp = dir.join("f").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &fp, false, false);
+        d.check_tree(&fp);
+        assert!(d.index.is_empty());
+        assert!(d.outbox.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

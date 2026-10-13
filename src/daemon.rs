@@ -1531,6 +1531,19 @@ mod tests {
         assert!(rxs[0].try_recv().is_err());
     }
 
+    #[tokio::test]
+    async fn node_list_shows_a_peer_shared_node_id_that_is_not_ascii() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        let mut theirs = Config { clock: d.cfg.clock, ..Config::default() };
+        theirs.set_node("aa", "aéééé", "h:2", false);
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Config(theirs.shared) });
+        let resp = d.on_ctl(&Req::ListNodes);
+        assert!(resp.text.contains("AÉÉÉÉ  h:2"), "{}", resp.text);
+    }
+
     #[test]
     fn unavailable_cancels_a_download_only_when_sent_by_its_source_for_the_same_version() {
         let mut d = daemon();

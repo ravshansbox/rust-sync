@@ -82,9 +82,10 @@ pub fn hex(b: &[u8]) -> String {
 
 /// Node ID in groups of 8 characters, for reading aloud or comparing by eye.
 pub fn pretty_id(id: &str) -> String {
-    id.as_bytes()
+    id.chars()
+        .collect::<Vec<_>>()
         .chunks(8)
-        .map(|c| std::str::from_utf8(c).unwrap().to_uppercase())
+        .map(|c| c.iter().collect::<String>().to_uppercase())
         .collect::<Vec<_>>()
         .join("-")
 }

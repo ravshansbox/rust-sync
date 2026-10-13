@@ -700,11 +700,8 @@ impl Daemon {
             if !self.peers.contains_key(&from) {
                 continue;
             }
-            if let Some(lp) = paths::to_local(&p) {
-                // Decide again: things may have changed while it was queued.
-                self.check_file(&p, &lp);
-                self.apply(&from, &p, &lp, r, None);
-            }
+            // Decide again: things may have changed while it was queued.
+            self.on_entry(&from, Entry { path: p, meta: r });
         }
     }
 
@@ -1645,6 +1642,30 @@ mod tests {
         assert!(d.queued.is_empty());
         assert_eq!(d.downloads.len(), MAX_DOWNLOADS - 1);
         let _ = std::fs::remove_file(tmp);
+    }
+
+    #[test]
+    fn queued_entry_is_not_downloaded_after_its_folder_stops_being_synced() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("queue-unshared");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _rx = up(&mut d, "aa", 1);
+        for n in 0..MAX_DOWNLOADS {
+            d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &dir.join(format!("busy{n}"))));
+        }
+        d.on_entry("aa", Entry { path: format!("{rp}/f"), meta: meta(0, 0) });
+        assert_eq!(d.queued.len(), 1);
+        d.cfg.set_root(&me, &rp, true, true);
+        d.cancel_download("~/s/0");
+        d.pump_queue();
+        assert!(!root.join(".f.rsync-tmp").exists());
+        assert_eq!(d.downloads.len(), MAX_DOWNLOADS - 1);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

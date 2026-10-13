@@ -506,7 +506,7 @@ impl Daemon {
         let mut seen = HashSet::new();
         match std::fs::symlink_metadata(&lp) {
             Ok(m) if m.is_dir() => self.walk(&lp, &mut seen),
-            _ if !self.below_file_root(p) => {
+            _ if !self.below_file_root(p) && !self.cfg.active_root(p).is_some_and(|r| r.is_dir) => {
                 self.check_file(p, &lp);
                 seen.insert(p.to_string());
             }
@@ -2484,6 +2484,21 @@ mod tests {
         std::fs::write(dir.join("f/x.txt"), "x").unwrap();
         let fp = dir.join("f").to_str().unwrap().to_string();
         d.cfg.set_root(&me, &fp, false, false);
+        d.check_tree(&fp);
+        assert!(d.index.is_empty());
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_file_that_replaced_a_synced_folder_is_not_recorded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("folder-to-file");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("f"), "x").unwrap();
+        let fp = dir.join("f").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &fp, true, false);
         d.check_tree(&fp);
         assert!(d.index.is_empty());
         assert!(d.outbox.is_empty());

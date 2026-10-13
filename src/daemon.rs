@@ -744,7 +744,11 @@ impl Daemon {
         if d.from != from || d.meta.hash != Some(hash) {
             return;
         }
-        if offset != d.written || d.written + bytes.len() as u64 > d.meta.size || d.file.write_all(bytes).is_err() {
+        if offset != d.written || d.written + bytes.len() as u64 > d.meta.size {
+            let d = self.downloads.remove(path).unwrap();
+            return self.retry_elsewhere(path.to_string(), d, from);
+        }
+        if d.file.write_all(bytes).is_err() {
             return self.cancel_download(path);
         }
         d.hasher.update(bytes);
@@ -1755,6 +1759,34 @@ mod tests {
             d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
         }
         let data = Msg::Data { path: p.clone(), hash, offset: 0, bytes: b"x".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data });
+        d.pump_queue();
+        assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "bb");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn download_that_grows_past_its_size_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("oversize-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (_a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while b.try_recv().is_ok() {}
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        let hash = r.hash.unwrap();
+        for from in ["aa", "bb"] {
+            d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
+        }
+        let data = Msg::Data { path: p.clone(), hash, offset: 0, bytes: b"xy".to_vec(), eof: false };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data });
         d.pump_queue();
         assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));

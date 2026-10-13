@@ -838,13 +838,16 @@ pub fn nodes_text(
 /// `notes.md` -> `notes.sync-conflict-<mtime>-<node>.md`, named after the losing
 /// version, so every node that holds that version picks the same name.
 fn conflict_name(lp: &Path, loser: &FileMeta) -> PathBuf {
-    let stem = lp.file_stem().unwrap_or_default().to_string_lossy();
     let tag = format!("sync-conflict-{}-{:08x}", loser.mtime / 1_000_000_000, loser.by >> 32);
-    let name = match lp.extension() {
-        Some(ext) => format!("{stem}.{tag}.{}", ext.to_string_lossy()),
-        None => format!("{stem}.{tag}"),
-    };
-    lp.with_file_name(name)
+    let mut stem = lp.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    let mut ext = lp.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    if ext.len() + tag.len() + 1 > 255 {
+        (stem, ext) = (lp.file_name().unwrap_or_default().to_string_lossy().into_owned(), String::new());
+    }
+    while stem.len() + tag.len() + 1 + ext.len() > 255 {
+        stem.pop();
+    }
+    lp.with_file_name(format!("{stem}.{tag}{ext}"))
 }
 
 /// Split entries into messages that fit in one frame.
@@ -1917,6 +1920,30 @@ mod tests {
         assert!(!tmp.exists());
         assert_eq!(d.index["~/s/f.txt"].hash, r.hash);
         assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn downloaded_conflict_winner_with_the_longest_allowed_name_keeps_the_local_copy() {
+        let mut d = daemon();
+        let dir = test_dir("conflict-long-name");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join(format!("{}.txt", "n".repeat(251)));
+        let tmp = dir.join("tmp");
+        std::fs::write(&lp, "mine").unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local);
+        let mut r = meta(1, 2);
+        r.hash = Some([2; 32]);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp.clone()));
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
+        let copies: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| *p != lp).collect();
+        assert_eq!(copies.len(), 1);
+        assert_eq!(std::fs::read_to_string(&copies[0]).unwrap(), "mine");
+        assert_eq!(d.index["~/s/f.txt"].hash, r.hash);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

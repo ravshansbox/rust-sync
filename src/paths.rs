@@ -71,6 +71,14 @@ pub fn is_under(path: &str, root: &str) -> bool {
     }
 }
 
+/// True if a folder between `root` and `path` is a symbolic link.
+pub fn through_symlink(path: &Path, root: &Path) -> bool {
+    path.ancestors()
+        .skip(1)
+        .take_while(|a| *a != root && a.starts_with(root))
+        .any(|a| std::fs::symlink_metadata(a).is_ok_and(|m| m.is_symlink()))
+}
+
 /// Write `bytes` to a temporary file next to `path`, then rename it into place.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");

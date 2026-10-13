@@ -583,10 +583,11 @@ impl Daemon {
     // ---- Remote changes ----
 
     fn on_entry(&mut self, from: &str, e: Entry) {
-        if self.cfg.root_of(&e.path).is_none() {
+        let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
+        let Some(lp) = paths::to_local(&e.path) else { return };
+        if paths::through_symlink(&lp, &root) {
             return;
         }
-        let Some(lp) = paths::to_local(&e.path) else { return };
         if lp.file_name().and_then(|n| n.to_str()).is_none_or(paths::ignored) {
             return;
         }
@@ -1907,6 +1908,26 @@ mod tests {
         assert_eq!(d.index.keys().collect::<Vec<_>>(), [&p]);
         assert_eq!(d.index[&p].vv, Vv(vec![(d.me_short, 1)]));
         assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_entries_through_a_symlinked_folder_are_skipped() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("entry-symlink");
+        let root = dir.join("in");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("link")).unwrap();
+        d.cfg.set_root(&me, root.to_str().unwrap(), true, false);
+        std::fs::write(dir.join("out/f.txt"), "x").unwrap();
+        let mut gone = meta(0, 2);
+        gone.hash = None;
+        gone.vv = Vv(vec![(2, 1), (d.me_short, 1)]);
+        d.on_entry("aa", Entry { path: root.join("link/f.txt").to_str().unwrap().into(), meta: gone });
+        assert!(dir.join("out/f.txt").exists());
+        assert!(d.index.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

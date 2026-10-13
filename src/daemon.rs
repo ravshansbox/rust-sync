@@ -640,7 +640,11 @@ impl Daemon {
                         Ok(()) => {
                             log!("deleted {p}");
                             if let Some(root) = self.cfg.root_of(p).and_then(paths::to_local) {
-                                let _ = lp.ancestors().skip(1).take_while(|a| *a != root && a.starts_with(&root)).try_for_each(std::fs::remove_dir);
+                                let _ = lp
+                                    .ancestors()
+                                    .skip(1)
+                                    .take_while(|a| a.starts_with(&root) && paths::to_portable(a).is_none_or(|ap| self.cfg.active_root(&ap).is_none()))
+                                    .try_for_each(std::fs::remove_dir);
                             }
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -2706,6 +2710,29 @@ mod tests {
         assert!(!root.join("a").exists());
         assert!(!root.join("c").exists());
         assert!(root.is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_of_the_last_file_in_a_nested_synced_folder_keeps_that_folder() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("deletion-keeps-nested-root");
+        let root = dir.join("s");
+        std::fs::create_dir_all(root.join("n")).unwrap();
+        std::fs::write(root.join("n/f"), "x").unwrap();
+        let p = root.to_str().unwrap().to_string();
+        let inner = format!("{p}/n");
+        d.cfg.set_root(&me, &p, true, false);
+        d.cfg.set_root(&me, &inner, true, false);
+        d.check_tree(&p);
+        let fp = format!("{inner}/f");
+        let mut r = d.index[&fp].clone();
+        r.hash = None;
+        r.vv = r.vv.bumped(2);
+        d.on_entry("aa", Entry { path: fp, meta: r });
+        assert!(!root.join("n/f").exists());
+        assert!(root.join("n").is_dir());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -647,6 +647,9 @@ impl Daemon {
             Action::Take | Action::Conflict => match tmp.take() {
                 None => self.start_download(from, p, r),
                 Some(t) => {
+                    if std::fs::symlink_metadata(lp).is_ok_and(|m| m.is_dir()) {
+                        let _ = std::fs::remove_dir(lp);
+                    }
                     if let (Action::Conflict, Some(l)) = (&action, &local)
                         && lp.exists()
                     {
@@ -2668,6 +2671,37 @@ mod tests {
         d.on_entry("aa", Entry { path: fp.clone(), meta: r });
         assert!(!root.join("f").exists());
         assert!(d.index[&fp].deleted());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn downloaded_file_replaces_the_empty_folder_left_by_a_synced_folder_that_became_a_file() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("folder-became-file-download");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("f"), "x").unwrap();
+        let p = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &p, true, false);
+        d.check_tree(&p);
+        d.cfg.set_root(&me, &p, false, false);
+        let mut r = meta(0, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: p.clone(), meta: r.clone() });
+        let fp = format!("{p}/f");
+        let mut del = d.index[&fp].clone();
+        del.hash = None;
+        del.vv = del.vv.bumped(2);
+        d.on_entry("aa", Entry { path: fp, meta: del });
+        let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert_eq!(std::fs::read(&root).unwrap(), b"abc");
+        assert_eq!(d.index[&p], r);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -582,7 +582,8 @@ impl Daemon {
 
     // ---- Remote changes ----
 
-    fn on_entry(&mut self, from: &str, e: Entry) {
+    fn on_entry(&mut self, from: &str, mut e: Entry) {
+        e.meta.mode &= 0o777;
         let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
         if paths::through_symlink(&lp, &root) {
@@ -1928,6 +1929,32 @@ mod tests {
         d.on_entry("aa", Entry { path: root.join("link/f.txt").to_str().unwrap().into(), meta: gone });
         assert!(dir.join("out/f.txt").exists());
         assert!(d.index.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_file_is_written_without_setuid_setgid_or_sticky_bits() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("entry-setuid");
+        std::fs::create_dir_all(&dir).unwrap();
+        d.cfg.set_root(&me, dir.to_str().unwrap(), true, false);
+        let p = dir.join("f.sh").to_str().unwrap().to_string();
+        let mut r = meta(0, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.mode = 0o7755;
+        r.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        let mode = std::fs::metadata(&p).unwrap().permissions().mode();
+        assert_eq!(mode & 0o7777, 0o755);
+        d.outbox.clear();
+        d.check_tree(&p);
+        assert!(d.outbox.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

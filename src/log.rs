@@ -55,7 +55,10 @@ impl LogFile {
     fn rotate(&mut self) -> std::io::Result<()> {
         let mut old = OsString::from(&self.path);
         old.push(".1");
-        std::fs::rename(&self.path, &old)?;
+        match std::fs::rename(&self.path, &old) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
         *self = Self::open(self.path.clone())?;
         Ok(())
     }
@@ -178,6 +181,24 @@ mod tests {
         close_file();
         assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE);
         assert_eq!(std::fs::metadata(&path).unwrap().len(), line_len as u64);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn line_starts_a_new_file_at_max_size_when_the_log_file_was_deleted() {
+        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
+        let dir = test_dir("deleted");
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
+        to_file(path.clone()).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        line(format_args!("after delete"));
+        close_file();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.ends_with(" after delete
+"));
+        assert!(!dir.join("test.log.1").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -612,7 +612,7 @@ impl Daemon {
         e.meta.mode &= 0o777;
         let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
-        if self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) && !e.meta.deleted() || self.below_file_root(&e.path) || paths::through_symlink(&lp, &root) {
+        if !e.meta.deleted() && (self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || self.below_file_root(&e.path)) || paths::through_symlink(&lp, &root) {
             return;
         }
         if lp.file_name().and_then(|n| n.to_str()).is_none_or(paths::ignored) {
@@ -2644,6 +2644,30 @@ mod tests {
         f.vv = Vv(vec![(2, 1)]);
         d.on_entry("aa", Entry { path: fp.clone(), meta: f });
         assert!(d.downloads.contains_key(&fp));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_below_a_synced_folder_that_became_a_file_removes_the_local_file() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("folder-became-file");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("f"), "x").unwrap();
+        let p = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &p, true, false);
+        d.check_tree(&p);
+        d.cfg.set_root(&me, &p, false, false);
+        let fp = format!("{p}/f");
+        let mut r = d.index[&fp].clone();
+        r.hash = None;
+        r.vv = r.vv.bumped(2);
+        d.on_entry("aa", Entry { path: fp.clone(), meta: r });
+        assert!(!root.join("f").exists());
+        assert!(d.index[&fp].deleted());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

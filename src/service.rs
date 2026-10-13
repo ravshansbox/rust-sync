@@ -117,7 +117,7 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
         bail!("a daemon is already running. Stop it first (Ctrl-C where it runs), then run this again.");
     }
     std::fs::create_dir_all(log_path().parent().unwrap())?;
-    write_plist(mode, &plist_xml(mode, &exe)?)?;
+    write_plist(mode, &plist_xml(mode, &exe, std::env::var_os("RUST_SYNC_HOME").is_some())?)?;
     if bootstrap(mode).is_err() {
         // launchd sometimes refuses with "5: Input/output error", for example while a
         // job with the same label is still unloading. Clear it and try once more.
@@ -322,7 +322,7 @@ fn user_name() -> anyhow::Result<String> {
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
-fn plist_xml(mode: Mode, exe: &Path) -> anyhow::Result<String> {
+fn plist_xml(mode: Mode, exe: &Path, custom_state: bool) -> anyhow::Result<String> {
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let exe = esc(&exe.to_string_lossy());
     let log = esc(&log_path().to_string_lossy());
@@ -334,8 +334,8 @@ fn plist_xml(mode: Mode, exe: &Path) -> anyhow::Result<String> {
         String::new()
     };
     // Keep a custom state folder, if one is in use.
-    if let Ok(dir) = std::env::var("RUST_SYNC_HOME") {
-        vars.push(("RUST_SYNC_HOME", dir));
+    if custom_state {
+        vars.push(("RUST_SYNC_HOME", paths::state_dir().to_string_lossy().into_owned()));
     }
     let env = if vars.is_empty() {
         String::new()
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn agent_plist() {
-        let xml = plist_xml(Mode::Agent, Path::new("/opt/a&b/<rust-sync>")).unwrap();
+        let xml = plist_xml(Mode::Agent, Path::new("/opt/a&b/<rust-sync>"), false).unwrap();
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"));
         assert!(xml.contains(&format!("<key>Label</key>\n  <string>{LABEL}</string>\n")));
         assert!(xml.contains("<string>/opt/a&amp;b/&lt;rust-sync&gt;</string>\n    <string>daemon</string>"));
@@ -386,7 +386,7 @@ mod tests {
         assert!(xml.contains(&format!("<string>--log-file</string>\n    <string>{}</string>", log.display())));
         assert!(!xml.contains("UserName"));
         assert!(!xml.contains("<key>HOME</key>"));
-        assert_eq!(xml.contains("<key>RUST_SYNC_HOME</key>"), std::env::var("RUST_SYNC_HOME").is_ok());
+        assert!(!xml.contains("<key>RUST_SYNC_HOME</key>"));
         assert!(xml.contains("<key>RunAtLoad</key>\n  <true/>"));
         assert!(xml.contains("<key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key>\n    <false/>"));
         assert!(xml.ends_with("</plist>\n"));
@@ -410,11 +410,19 @@ mod tests {
 
     #[test]
     fn system_plist() {
-        let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync")).unwrap();
+        let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync"), false).unwrap();
         let user = String::from_utf8(Command::new("whoami").output().unwrap().stdout).unwrap();
         assert!(xml.contains(&format!("<key>UserName</key>\n  <string>{}</string>\n", user.trim())));
         assert!(!xml.contains("\n</string>"));
         assert!(xml.contains("<key>EnvironmentVariables</key>\n  <dict>\n"));
         assert!(xml.contains(&format!("<key>HOME</key>\n    <string>{}</string>", paths::home().display())));
+    }
+
+    #[test]
+    fn plist_keeps_a_custom_state_folder_as_an_absolute_path() {
+        let xml = plist_xml(Mode::Agent, Path::new("/usr/local/bin/rust-sync"), true).unwrap();
+        let dir = paths::state_dir();
+        assert!(dir.is_absolute());
+        assert!(xml.contains(&format!("<key>RUST_SYNC_HOME</key>\n    <string>{}</string>", dir.display())));
     }
 }

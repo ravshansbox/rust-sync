@@ -708,7 +708,7 @@ impl Daemon {
         if d.from != from {
             return;
         }
-        if offset != d.written || d.file.write_all(bytes).is_err() {
+        if offset != d.written || d.written + bytes.len() as u64 > d.meta.size || d.file.write_all(bytes).is_err() {
             return self.cancel_download(path);
         }
         d.hasher.update(bytes);
@@ -1513,7 +1513,7 @@ mod tests {
             up(&mut d, id, conn);
         }
         let tmp = test_dir("data");
-        d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
+        d.downloads.insert("~/s/f".into(), download("aa", FileMeta { size: 5, ..meta(0, 0) }, &tmp));
         let data = |offset, bytes: &[u8]| Msg::Data { path: "~/s/f".into(), offset, bytes: bytes.to_vec(), eof: false };
         d.handle(Event::Peer { id: "bb".into(), conn: 2, msg: data(0, b"xx") });
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(0, b"abc") });
@@ -2023,6 +2023,28 @@ mod tests {
         d.outbox.clear();
         d.check_tree(&p);
         assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn download_is_cancelled_when_a_peer_sends_more_bytes_than_the_file_size() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("entry-oversize");
+        std::fs::create_dir_all(&dir).unwrap();
+        d.cfg.set_root(&me, dir.to_str().unwrap(), true, false);
+        let p = dir.join("f").to_str().unwrap().to_string();
+        let mut r = meta(0, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        assert!(dir.join(".f.rsync-tmp").exists());
+        let msg = Msg::Data { path: p.clone(), offset: 0, bytes: b"abcd".to_vec(), eof: false };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert!(!dir.join(".f.rsync-tmp").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

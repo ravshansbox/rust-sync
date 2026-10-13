@@ -78,6 +78,8 @@ struct Download {
     file: File,
     hasher: blake3::Hasher,
     written: u64,
+    /// Other nodes that offered the same content, to fall back on if `from` goes down.
+    alts: Vec<String>,
 }
 
 struct Daemon {
@@ -676,8 +678,11 @@ impl Daemon {
     }
 
     fn start_download(&mut self, from: &str, p: &str, r: FileMeta) {
-        if let Some(d) = self.downloads.get(p) {
+        if let Some(d) = self.downloads.get_mut(p) {
             if !matches!(index::decide(Some(&d.meta), &r), Action::Take | Action::Conflict) {
+                if d.from != from && d.meta.hash == r.hash && !d.alts.iter().any(|a| a == from) {
+                    d.alts.push(from.to_string());
+                }
                 return;
             }
             self.cancel_download(p);
@@ -697,7 +702,7 @@ impl Daemon {
             Err(e) => return log!("cannot create {}: {e}", tmp.display()),
         };
         let _ = peer.ctl.send(Msg::Request { path: p.to_string(), hash: r.hash.unwrap() });
-        let d = Download { from: from.to_string(), meta: r, tmp, file, hasher: blake3::Hasher::new(), written: 0 };
+        let d = Download { from: from.to_string(), meta: r, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() };
         self.downloads.insert(p.to_string(), d);
     }
 
@@ -751,10 +756,13 @@ impl Daemon {
     }
 
     fn drop_downloads_from(&mut self, id: &str) {
-        for (_, d) in self.downloads.extract_if(|_, d| d.from == id) {
-            let _ = std::fs::remove_file(d.tmp);
-        }
         self.queued.retain(|_, (from, _)| from != id);
+        for (p, d) in self.downloads.extract_if(|_, d| d.from == id) {
+            let _ = std::fs::remove_file(d.tmp);
+            if let Some(alt) = d.alts.into_iter().find(|a| a != id && self.peers.contains_key(a)) {
+                self.queued.entry(p).or_insert((alt, d.meta));
+            }
+        }
     }
 
     fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
@@ -1096,7 +1104,7 @@ mod tests {
 
     fn download(from: &str, meta: FileMeta, tmp: &Path) -> Download {
         let file = File::create(tmp).unwrap();
-        Download { from: from.into(), meta, tmp: tmp.to_path_buf(), file, hasher: blake3::Hasher::new(), written: 0 }
+        Download { from: from.into(), meta, tmp: tmp.to_path_buf(), file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
     }
 
     fn test_dir(name: &str) -> PathBuf {
@@ -1378,6 +1386,32 @@ mod tests {
         assert!(!tmps[0].exists());
         assert!(tmps[1].exists());
         d.cancel_download("~/s/bb");
+    }
+
+    #[tokio::test]
+    async fn download_from_a_node_that_goes_down_is_requested_from_another_node_that_offered_it() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("download-other-source");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (_a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while b.try_recv().is_ok() {}
+        let p = format!("{rp}/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.on_entry("aa", Entry { path: p.clone(), meta: r.clone() });
+        d.on_entry("bb", Entry { path: p.clone(), meta: r });
+        assert!(b.try_recv().is_err());
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        d.pump_queue();
+        assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "bb");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

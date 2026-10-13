@@ -680,7 +680,7 @@ impl Daemon {
             self.cancel_download(p);
         }
         if self.downloads.len() >= MAX_DOWNLOADS {
-            if self.queued.get(p).is_none_or(|(_, q)| q.vv.compare(&r.vv) != Order::Newer) {
+            if self.queued.get(p).is_none_or(|(_, q)| q.vv.compare(&r.vv) != Order::Newer && index::decide(Some(q), &r) != Action::LocalWins) {
                 self.queued.insert(p.to_string(), (from.to_string(), r));
             }
             return;
@@ -1684,6 +1684,21 @@ mod tests {
             assert_eq!(queued(&d), Some((want.0.to_string(), Vv(vec![(1, want.1)]))));
         }
         assert_eq!(d.downloads.len(), MAX_DOWNLOADS);
+        std::fs::remove_file(tmp).unwrap();
+    }
+
+    #[test]
+    fn when_downloads_are_full_a_queued_version_is_not_replaced_by_a_concurrent_loser() {
+        let mut d = daemon();
+        let tmp = test_dir("queue-concurrent");
+        for n in 0..MAX_DOWNLOADS {
+            d.downloads.insert(format!("~/s/{n}"), download("aa", meta(0, 0), &tmp));
+        }
+        let winner = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(2, 1) };
+        let loser = FileMeta { hash: Some([2; 32]), vv: Vv(vec![(2, 1)]), ..meta(1, 2) };
+        d.start_download("aa", "~/s/f", winner.clone());
+        d.start_download("bb", "~/s/f", loser);
+        assert_eq!(d.queued.get("~/s/f"), Some(&("aa".to_string(), winner)));
         std::fs::remove_file(tmp).unwrap();
     }
 

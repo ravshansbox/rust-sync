@@ -491,7 +491,8 @@ impl Daemon {
             return;
         }
         let Some(p) = paths::to_portable(lp) else { return };
-        if self.cfg.root_of(&p).is_some() {
+        let Some(root) = self.cfg.root_of(&p).and_then(paths::to_local) else { return };
+        if !paths::through_symlink(lp, &root) {
             self.check_tree(&p);
         }
     }
@@ -2167,6 +2168,25 @@ mod tests {
         assert_eq!(d.index.keys().collect::<Vec<_>>(), [&p]);
         assert_eq!(d.index[&p].vv, Vv(vec![(d.me_short, 1)]));
         assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn file_events_through_a_symlinked_folder_are_ignored() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("fs-symlink");
+        let root = dir.join("in");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(dir.join("out/sub")).unwrap();
+        std::fs::write(dir.join("out/f.txt"), "secret").unwrap();
+        std::fs::write(dir.join("out/sub/g.txt"), "secret").unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("link")).unwrap();
+        d.cfg.set_root(&me, root.to_str().unwrap(), true, false);
+        d.on_fs(&root.join("link/f.txt"));
+        d.on_fs(&root.join("link/sub"));
+        assert!(d.index.is_empty());
+        assert!(d.outbox.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

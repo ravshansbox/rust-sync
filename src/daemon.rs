@@ -299,7 +299,9 @@ impl Daemon {
         log!("connected to {}", net::pretty_id(&id));
         self.backoff.remove(&id);
         self.remove_pending(&id);
-        let _ = peer.ctl.send(Msg::Config(self.cfg.shared.clone()));
+        for shared in config_batches(&self.cfg.shared) {
+            let _ = peer.ctl.send(Msg::Config(shared));
+        }
         let entries: Vec<Entry> = self
             .index
             .iter()
@@ -419,7 +421,9 @@ impl Daemon {
             // Peers may not have seen our entries for this root yet.
             self.outbox.extend(index::under(&self.index, root).map(Entry::from));
         }
-        self.broadcast(&Msg::Config(self.cfg.shared.clone()));
+        for shared in config_batches(&self.cfg.shared) {
+            self.broadcast(&Msg::Config(shared));
+        }
         self.dial_all();
     }
 
@@ -933,6 +937,30 @@ fn batches(entries: Vec<Entry>) -> Vec<Vec<Entry>> {
     }
     if !cur.is_empty() {
         out.push(cur);
+    }
+    out
+}
+
+/// Split the shared config into parts that each fit in one message.
+fn config_batches(shared: &Shared) -> Vec<Shared> {
+    const LIMIT: usize = 40_000;
+    let mut out = vec![Shared::default()];
+    let mut size = 0;
+    let mut add = |s: usize, put: &mut dyn FnMut(&mut Shared)| {
+        if size + s > LIMIT && out.last().is_some_and(|c| !c.nodes.is_empty() || !c.roots.is_empty()) {
+            out.push(Shared::default());
+            size = 0;
+        }
+        size += s;
+        put(out.last_mut().unwrap());
+    };
+    for (id, n) in &shared.nodes {
+        let s = postcard::to_stdvec(&(id, n)).map_or(0, |b| b.len());
+        add(s, &mut |c| drop(c.nodes.insert(id.clone(), n.clone())));
+    }
+    for (path, r) in &shared.roots {
+        let s = postcard::to_stdvec(&(path, r)).map_or(0, |b| b.len());
+        add(s, &mut |c| drop(c.roots.insert(path.clone(), r.clone())));
     }
     out
 }
@@ -1652,6 +1680,33 @@ mod tests {
         let Ok(Msg::Index(entries)) = rx.try_recv() else { panic!("no index sent") };
         assert_eq!(entries.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(), ["~/s/f"]);
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_config_too_large_for_one_message_is_sent_in_pieces_that_fit() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        for i in 0..2000 {
+            d.cfg.set_root(&me, &format!("~/{}/{i}", "x".repeat(40)), true, true);
+        }
+        let received = |rx: &mut mpsc::UnboundedReceiver<Msg>| {
+            let mut got = Config::default();
+            while let Ok(m) = rx.try_recv() {
+                if let Msg::Config(s) = m {
+                    let len = postcard::to_stdvec(&Msg::Config(s.clone())).unwrap().len();
+                    assert!(len <= net::MAX_MSG, "{len}");
+                    got.merge(&s, "zz");
+                }
+            }
+            got.shared
+        };
+        let mut rx = up(&mut d, "aa", 1);
+        let got = received(&mut rx);
+        assert_eq!((got.nodes.len(), got.roots.len()), (1, 2000));
+        d.on_ctl(&Req::AddPath { path: "~/new".into(), is_dir: true });
+        let got = received(&mut rx);
+        assert_eq!((got.nodes.len(), got.roots.len()), (1, 2001));
     }
 
     #[test]

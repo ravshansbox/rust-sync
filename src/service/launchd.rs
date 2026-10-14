@@ -10,11 +10,13 @@ use std::time::Duration;
 /// Pause before the second bootstrap attempt.
 const RETRY_PAUSE: Duration = Duration::from_secs(1);
 
+/// Load the job's plist into launchd, failing with launchctl's error message.
 pub(super) fn bootstrap(mode: Mode) -> anyhow::Result<()> {
     let plist = mode.plist();
     launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])
 }
 
+/// Load the job, and if that fails, unload it and try once more after a short pause.
 pub(super) fn bootstrap_with_retry(mode: Mode) -> anyhow::Result<()> {
     if bootstrap(mode).is_err() {
         // launchd sometimes refuses with "5: Input/output error", for example while a
@@ -64,10 +66,12 @@ pub(super) fn kill(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Start the loaded job now.
 pub(super) fn kickstart(mode: Mode) -> anyhow::Result<()> {
     launchctl(mode, &["kickstart", &mode.target()?])
 }
 
+/// Run launchctl for `mode` and fail with its error output if it exits unsuccessfully.
 fn launchctl(mode: Mode, args: &[&str]) -> anyhow::Result<()> {
     let out = mode.launchctl(args)?;
     if !out.status.success() {

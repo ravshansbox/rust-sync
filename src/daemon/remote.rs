@@ -66,8 +66,7 @@ impl Daemon {
         if std::fs::symlink_metadata(lp).is_ok_and(|m| m.is_dir()) {
             let _ = std::fs::remove_dir(lp);
         }
-        let mut kept = None;
-        if let Some(l) = conflict
+        let kept = if let Some(l) = conflict
             && !l.deleted()
             && lp.exists()
         {
@@ -76,8 +75,10 @@ impl Daemon {
                 let _ = std::fs::remove_file(t);
                 return log!("cannot keep conflict copy of {p}: {e}");
             }
-            kept = Some(copy);
-        }
+            Some(copy)
+        } else {
+            None
+        };
         if let Err(e) = std::fs::rename(t, lp) {
             let _ = std::fs::remove_file(t);
             if let Some(copy) = kept {

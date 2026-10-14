@@ -39,6 +39,10 @@ impl Download {
     pub(super) fn new(from: &str, meta: FileMeta, tmp: PathBuf, file: File) -> Self {
         Self { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
     }
+
+    fn matches(&self, from: &str, hash: Option<[u8; 32]>) -> bool {
+        self.from == from && self.meta.hash == hash
+    }
 }
 
 impl Daemon {
@@ -86,8 +90,7 @@ impl Daemon {
             // Decide again: things may have changed while it was queued.
             self.on_entry(&from, Entry { path: p.clone(), meta: r });
             if let Some(d) = self.downloads.get_mut(&p)
-                && d.from == from
-                && d.meta.hash == hash
+                && d.matches(&from, hash)
             {
                 d.alts = alts;
             }
@@ -96,7 +99,7 @@ impl Daemon {
 
     pub(super) fn on_data(&mut self, from: &str, path: &str, hash: [u8; 32], offset: u64, bytes: &[u8], eof: bool) {
         let Some(d) = self.downloads.get_mut(path) else { return };
-        if d.from != from || d.meta.hash != Some(hash) {
+        if !d.matches(from, Some(hash)) {
             return;
         }
         if offset != d.written || d.written + bytes.len() as u64 > d.meta.size {
@@ -134,7 +137,7 @@ impl Daemon {
     }
 
     pub(super) fn on_unavailable(&mut self, from: &str, path: String, hash: [u8; 32]) {
-        if self.downloads.get(&path).is_some_and(|d| d.from == from && d.meta.hash == Some(hash)) {
+        if self.downloads.get(&path).is_some_and(|d| d.matches(from, Some(hash))) {
             let d = self.downloads.remove(&path).unwrap();
             self.retry_elsewhere(path, d, from);
         }

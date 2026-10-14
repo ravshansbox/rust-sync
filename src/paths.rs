@@ -68,23 +68,23 @@ pub fn to_local(portable: &str) -> Option<PathBuf> {
         home().to_path_buf()
     } else if let Some(rest) = portable.strip_prefix("~/") {
         home().join(rest)
-    } else if portable.starts_with('/') && !Path::new(portable).starts_with(home()) {
+    } else if portable.starts_with('/') && !Path::new(portable).starts_with(home()) && !is_under_in_another_spelling(Path::new(portable), home()) {
         PathBuf::from(portable)
     } else {
         return None;
     };
     // Never touch our own state folder.
-    if p.starts_with(state_dir()) || is_state_dir_in_another_spelling(&p) {
+    if p.starts_with(state_dir()) || is_under_in_another_spelling(&p, state_dir()) {
         return None;
     }
     Some(p)
 }
 
-fn is_state_dir_in_another_spelling(p: &Path) -> bool {
+fn is_under_in_another_spelling(p: &Path, dir: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
-    let depth = state_dir().components().count();
+    let depth = dir.components().count();
     let Some(a) = p.ancestors().find(|a| a.components().count() == depth) else { return false };
-    match (std::fs::metadata(a), std::fs::metadata(state_dir())) {
+    match (std::fs::metadata(a), std::fs::metadata(dir)) {
         (Ok(a), Ok(s)) => (a.dev(), a.ino()) == (s.dev(), s.ino()),
         _ => false,
     }
@@ -222,6 +222,13 @@ mod tests {
     fn to_local_rejects_absolute_spelling_of_a_home_path() {
         assert_eq!(to_local(home().join("a/b").to_str().unwrap()), None);
         assert_eq!(to_local(home().to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn to_local_rejects_absolute_spelling_of_a_home_path_in_another_case() {
+        let upper = home().to_str().unwrap().to_uppercase();
+        assert_eq!(to_local(&format!("{upper}/a/b")), None);
+        assert_eq!(to_local(&upper), None);
     }
 
     #[test]

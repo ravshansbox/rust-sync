@@ -12,9 +12,7 @@ impl Daemon {
     pub(super) fn start_download(&mut self, from: &str, p: &str, r: FileMeta) {
         if let Some(d) = self.downloads.get_mut(p) {
             if !matches!(index::decide(Some(&d.meta), &r), Action::Take | Action::Conflict) {
-                if d.from != from && d.meta.hash == r.hash && !d.alts.iter().any(|a| a == from) {
-                    d.alts.push(from.to_string());
-                }
+                add_alt(&mut d.alts, &d.from, &d.meta, from, &r);
                 return;
             }
             self.cancel_download(p);
@@ -23,9 +21,7 @@ impl Daemon {
             if let Some((qfrom, q, alts)) = self.queued.get_mut(p) {
                 match index::decide(Some(q), &r) {
                     Action::Nothing | Action::Same => {
-                        if qfrom != from && q.hash == r.hash && !alts.iter().any(|a| a == from) {
-                            alts.push(from.to_string());
-                        }
+                        add_alt(alts, qfrom, q, from, &r);
                         return;
                     }
                     Action::LocalWins => return,
@@ -150,5 +146,11 @@ impl Daemon {
             let alt = d.alts.remove(0);
             self.queued.entry(p).or_insert((alt, d.meta, d.alts));
         }
+    }
+}
+
+fn add_alt(alts: &mut Vec<String>, holder: &str, held: &FileMeta, from: &str, r: &FileMeta) {
+    if holder != from && held.hash == r.hash && !alts.iter().any(|a| a == from) {
+        alts.push(from.to_string());
     }
 }

@@ -3163,6 +3163,28 @@ mod tests {
     }
 
     #[test]
+    fn scan_records_regular_files_but_not_symlinks_to_files_or_folders_outside() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("scan-symlinks");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(dir.join("out")).unwrap();
+        std::fs::write(dir.join("out/secret.txt"), "secret").unwrap();
+        std::fs::write(root.join("f.txt"), "x").unwrap();
+        std::os::unix::fs::symlink(dir.join("out/secret.txt"), root.join("file-link")).unwrap();
+        std::os::unix::fs::symlink(dir.join("out"), root.join("dir-link")).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.check_tree(&rp);
+        let recorded: Vec<_> = d.index.keys().cloned().collect();
+        assert_eq!(recorded, [format!("{rp}/f.txt")]);
+        let sent: Vec<_> = d.outbox.iter().map(|e| e.path.clone()).collect();
+        assert_eq!(sent, [format!("{rp}/f.txt")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn remote_entry_for_a_folder_root_itself_is_skipped() {
         let mut d = daemon();
         let me = d.me.clone();

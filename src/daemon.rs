@@ -42,8 +42,6 @@ const MAX_UPLOADS: usize = 8;
 /// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
 /// connection attempts can't grow the list without end.
 const MAX_PENDING: usize = 20;
-/// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
-const MAX_BACKOFF: Duration = TICK;
 
 enum Event {
     Fs(Vec<PathBuf>),
@@ -238,34 +236,12 @@ impl Daemon {
                 self.save_index();
             }
             Event::Auth { id, addr, reply } => {
-                let ok = self.cfg.trusted(&id).is_some();
-                if let (false, Some(addr)) = (ok, addr) {
-                    // Log each node once, so repeated attempts don't flood the log.
-                    if !self.pending.contains_key(&id) {
-                        log!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
-                    }
-                    self.add_pending(id, addr);
-                }
+                let ok = self.on_auth(id, addr);
                 let _ = reply.send(ok);
             }
             Event::Up { id, conn, outbound, ctl, data } => self.peer_up(id, Peer { conn, outbound, ctl, data }),
-            Event::Down { id, conn } => {
-                if self.peers.get(&id).is_some_and(|p| p.conn == conn) {
-                    self.peers.remove(&id);
-                    self.drop_downloads_from(&id);
-                    log!("disconnected from {}", net::pretty_id(&id));
-                    if !self.dialling.contains(&id) {
-                        self.redial_after(id, Duration::from_secs(1));
-                    }
-                }
-            }
-            Event::DialDone { id } => {
-                self.dialling.remove(&id);
-                if !self.peers.contains_key(&id) {
-                    let wait = self.backoff.get(&id).map_or(Duration::from_secs(1), |d| (*d * 2).min(MAX_BACKOFF));
-                    self.redial_after(id, wait);
-                }
-            }
+            Event::Down { id, conn } => self.peer_down(id, conn),
+            Event::DialDone { id } => self.dial_done(id),
             Event::Redial { id } => self.dial(&id),
             Event::Peer { id, conn, msg } => {
                 if self.peers.get(&id).is_some_and(|p| p.conn == conn) {

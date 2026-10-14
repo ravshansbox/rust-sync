@@ -1,6 +1,7 @@
 use super::*;
 use super::remote::conflict_name;
 use super::conn::{connect_any, connection_inner, dial};
+use super::peers::MAX_BACKOFF;
 use super::tasks::{SETTLE, SETTLE_MAX};
 use crate::index::{Action, Vv};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

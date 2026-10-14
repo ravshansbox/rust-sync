@@ -6,6 +6,9 @@ use crate::log::log;
 use crate::net::{self, Msg};
 use std::time::Duration;
 
+/// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
+pub(super) const MAX_BACKOFF: Duration = super::TICK;
+
 impl Daemon {
     pub(super) fn peer_up(&mut self, id: String, peer: Peer) {
         if self.cfg.trusted(&id).is_none() {
@@ -35,6 +38,38 @@ impl Daemon {
             let _ = peer.ctl.send(Msg::Index(batch));
         }
         self.peers.insert(id, peer);
+    }
+
+    /// Whether a node that finished the handshake is trusted. Untrusted ones are remembered.
+    pub(super) fn on_auth(&mut self, id: String, addr: Option<String>) -> bool {
+        let ok = self.cfg.trusted(&id).is_some();
+        if let (false, Some(addr)) = (ok, addr) {
+            // Log each node once, so repeated attempts don't flood the log.
+            if !self.pending.contains_key(&id) {
+                log!("untrusted node {} at {addr} tried to connect", net::pretty_id(&id));
+            }
+            self.add_pending(id, addr);
+        }
+        ok
+    }
+
+    pub(super) fn peer_down(&mut self, id: String, conn: u64) {
+        if self.peers.get(&id).is_some_and(|p| p.conn == conn) {
+            self.peers.remove(&id);
+            self.drop_downloads_from(&id);
+            log!("disconnected from {}", net::pretty_id(&id));
+            if !self.dialling.contains(&id) {
+                self.redial_after(id, Duration::from_secs(1));
+            }
+        }
+    }
+
+    pub(super) fn dial_done(&mut self, id: String) {
+        self.dialling.remove(&id);
+        if !self.peers.contains_key(&id) {
+            let wait = self.backoff.get(&id).map_or(Duration::from_secs(1), |d| (*d * 2).min(MAX_BACKOFF));
+            self.redial_after(id, wait);
+        }
     }
 
     pub(super) fn add_pending(&mut self, id: String, addr: String) {

@@ -18,31 +18,42 @@ pub struct Stamp(pub u64, pub String);
 /// A node in the shared list: its address and whether it was removed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeEntry {
+    /// Where to dial the node, as `host` or `host:port`.
     pub addr: String,
+    /// True if the node was removed from the list.
     pub removed: bool,
+    /// When this entry was last changed.
     pub stamp: Stamp,
 }
 
 /// A synced folder or file in the shared list, and whether it was removed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RootEntry {
+    /// True for a folder, false for a single file.
     pub is_dir: bool,
+    /// True if the path is no longer synced.
     pub removed: bool,
+    /// When this entry was last changed.
     pub stamp: Stamp,
 }
 
 /// The node and root lists that peers exchange and merge.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Shared {
+    /// Nodes, keyed by node ID.
     pub nodes: BTreeMap<String, NodeEntry>,
+    /// Synced paths, keyed by portable path (for example `~/Documents`).
     pub roots: BTreeMap<String, RootEntry>,
 }
 
 /// This node's saved settings: its port, its clock and the shared lists.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
+    /// The port this node listens on.
     pub port: u16,
+    /// The Lamport clock: the highest stamp value seen or made by this node.
     pub clock: u64,
+    /// The lists shared with peers.
     pub shared: Shared,
 }
 

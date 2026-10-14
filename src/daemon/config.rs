@@ -13,6 +13,11 @@ impl Daemon {
         self.cfg.active_roots().map(|(r, e)| (r.clone(), e.is_dir)).collect()
     }
 
+    fn refresh_root(&mut self, root: &str) {
+        self.check_tree(root);
+        self.outbox.extend(index::under(&self.index, root).map(Entry::from));
+    }
+
     pub(super) fn on_config(&mut self, shared: &Shared) {
         let before = self.active_roots();
         if self.cfg.merge(shared, &self.me) {
@@ -43,14 +48,12 @@ impl Daemon {
         let after = self.active_roots();
         for (root, _) in after.difference(before) {
             log!("now syncing {root}");
-            self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
-            self.outbox.extend(index::under(&self.index, root).map(Entry::from));
+            self.refresh_root(root);
         }
         for (root, _) in before.difference(&after) {
             if self.cfg.active_root(root).is_none() && self.cfg.root_of(root).is_some() {
-                self.check_tree(root);
-                self.outbox.extend(index::under(&self.index, root).map(Entry::from));
+                self.refresh_root(root);
             }
         }
         for shared in config_batches(&self.cfg.shared) {

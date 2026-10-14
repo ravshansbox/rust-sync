@@ -1,5 +1,5 @@
 use super::batch::{batches, config_batches};
-use super::tasks::dial;
+use super::conn::dial;
 use super::{Daemon, Event, MAX_PENDING, Peer};
 use crate::index::Entry;
 use crate::log::log;

@@ -21,6 +21,7 @@ use tokio::sync::{Semaphore, mpsc, oneshot};
 
 mod batch;
 mod config;
+mod conn;
 mod download;
 mod peers;
 mod remote;
@@ -29,7 +30,8 @@ mod tasks;
 mod text;
 
 use batch::batches;
-use tasks::{accept_loop, ctl_loop, debounce, upload};
+use conn::accept_loop;
+use tasks::{ctl_loop, debounce, upload};
 pub use text::{nodes_text, paths_text, status_text};
 
 const TICK: Duration = Duration::from_secs(30);

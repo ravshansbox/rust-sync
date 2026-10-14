@@ -11,7 +11,7 @@
 use crate::ctl::{self, Req};
 use crate::paths;
 use anyhow::{Context, bail};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -71,7 +71,11 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
         std::thread::sleep(Duration::from_secs(1));
         bootstrap(mode)?;
     }
+    print_installed(mode, &exe);
+    Ok(())
+}
 
+fn print_installed(mode: Mode, exe: &Path) {
     outln!("Installed. rust-sync now starts at {}, and it is running now.", mode.when());
     outln!("  Launcher: {}", mode.plist().display());
     outln!("  Log:      {}", log_path().display());
@@ -83,7 +87,6 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
              `rust-sync service install` from there."
         );
     }
-    Ok(())
 }
 
 pub fn uninstall() -> anyhow::Result<()> {

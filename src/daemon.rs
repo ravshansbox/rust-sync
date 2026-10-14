@@ -70,14 +70,18 @@ enum Event {
 
 /// The running daemon's state, owned by the event loop.
 struct Daemon {
+    /// This node's ID.
     me: String,
+    /// Short form of `me`, used in version vectors.
     me_short: u64,
     keys: Arc<Keys>,
     cfg: Config,
     config_file: PathBuf,
     index: Index,
     index_file: PathBuf,
+    /// Connected, trusted peers by ID.
     peers: HashMap<String, Peer>,
+    /// IDs of nodes we are dialling now.
     dialling: HashSet<String>,
     /// Nodes we failed to reach, and how long we wait before the next try.
     backoff: HashMap<String, Duration>,
@@ -85,14 +89,22 @@ struct Daemon {
     pending: BTreeMap<String, String>,
     /// IDs in `pending`, oldest first.
     pending_order: VecDeque<String>,
+    /// Downloads in progress, by portable path.
     downloads: HashMap<String, Download>,
+    /// Downloads waiting for a free slot: path -> (sender, wanted meta, fallback senders).
     queued: BTreeMap<String, (String, FileMeta, Vec<String>)>,
+    /// Limits how many uploads run at once.
     uploads: Arc<Semaphore>,
     watcher: RecommendedWatcher,
+    /// Local folders being watched, and how.
     watched: HashMap<PathBuf, RecursiveMode>,
+    /// Sends events to this daemon's event loop.
     tx: mpsc::UnboundedSender<Event>,
+    /// Index entries changed while handling the current event, sent to peers by `flush`.
     outbox: Vec<Entry>,
+    /// True when the index has changes not yet saved to `index_file`.
     index_dirty: bool,
+    /// Number of ticks since start.
     ticks: u64,
 }
 

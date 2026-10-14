@@ -12,18 +12,26 @@ use tokio::net::UnixStream;
 /// A request from the CLI to the daemon.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Req {
+    /// Start syncing a file or folder, given as a portable path.
     AddPath { path: String, is_dir: bool },
+    /// Stop syncing a portable path. The files stay on disk.
     RemovePath { path: String },
+    /// Trust the node with this ID, reachable at `addr`.
     AddNode { id: String, addr: String },
+    /// Stop trusting the node with this ID.
     RemoveNode { id: String },
+    /// List the trusted nodes.
     ListNodes,
+    /// Report the daemon's status. Also used to check that a daemon is running.
     Status,
 }
 
 /// The daemon's reply: whether the request worked, and the text to show.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Resp {
+    /// Whether the request worked.
     pub ok: bool,
+    /// The text to show to the user.
     pub text: String,
 }
 

@@ -731,7 +731,7 @@ impl Daemon {
         if self.downloads.len() >= MAX_DOWNLOADS {
             if let Some((qfrom, q, alts)) = self.queued.get_mut(p) {
                 match index::decide(Some(q), &r) {
-                    Action::Nothing => {
+                    Action::Nothing | Action::Same => {
                         if qfrom != from && q.hash == r.hash && !alts.iter().any(|a| a == from) {
                             alts.push(from.to_string());
                         }
@@ -1551,6 +1551,35 @@ mod tests {
         for from in ["aa", "bb"] {
             d.on_entry(from, Entry { path: p.clone(), meta: r.clone() });
         }
+        d.downloads.clear();
+        d.handle(Event::Down { id: "bb".into(), conn: 2 });
+        d.pump_queue();
+        assert!(matches!(a.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
+        assert_eq!(d.downloads[&p].from, "aa");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn queued_download_is_kept_when_another_node_offers_a_concurrent_version_with_the_same_content_and_goes_down() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("queued-same-content");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        for id in ["aa", "bb"] {
+            d.cfg.set_node(&me, id, "h:1", false);
+        }
+        let (mut a, mut b) = (up(&mut d, "aa", 1), up(&mut d, "bb", 2));
+        while a.try_recv().is_ok() {}
+        while b.try_recv().is_ok() {}
+        for n in 0..MAX_DOWNLOADS {
+            d.downloads.insert(format!("{rp}/{n}"), download("aa", meta(0, 0), &dir.join(format!("t{n}"))));
+        }
+        let p = format!("{rp}/f");
+        d.on_entry("aa", Entry { path: p.clone(), meta: FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) } });
+        d.on_entry("bb", Entry { path: p.clone(), meta: FileMeta { vv: Vv(vec![(2, 1)]), ..meta(5, 2) } });
         d.downloads.clear();
         d.handle(Event::Down { id: "bb".into(), conn: 2 });
         d.pump_queue();

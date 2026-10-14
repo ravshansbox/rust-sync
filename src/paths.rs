@@ -82,12 +82,8 @@ pub fn to_local(portable: &str) -> Option<PathBuf> {
 
 fn is_under_in_another_spelling(p: &Path, dir: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
-    let depth = dir.components().count();
-    let Some(a) = p.ancestors().find(|a| a.components().count() == depth) else { return false };
-    match (std::fs::metadata(a), std::fs::metadata(dir)) {
-        (Ok(a), Ok(s)) => (a.dev(), a.ino()) == (s.dev(), s.ino()),
-        _ => false,
-    }
+    let Ok(d) = std::fs::metadata(dir) else { return false };
+    p.ancestors().any(|a| std::fs::metadata(a).is_ok_and(|a| (a.dev(), a.ino()) == (d.dev(), d.ino())))
 }
 
 /// True if `path` is `root` or inside it.
@@ -229,6 +225,21 @@ mod tests {
         let upper = home().to_str().unwrap().to_uppercase();
         assert_eq!(to_local(&format!("{upper}/a/b")), None);
         assert_eq!(to_local(&upper), None);
+    }
+
+    #[test]
+    fn to_local_rejects_absolute_path_that_reaches_home_or_state_folder_at_another_depth() {
+        let tmp = std::env::temp_dir().canonicalize().unwrap().join(format!("rust-sync-to-local-link-{}", std::process::id()));
+        std::fs::create_dir_all(tmp.join("a/b")).unwrap();
+        std::fs::create_dir_all(state_dir()).unwrap();
+        let _ = std::fs::remove_file(tmp.join("a/b/home"));
+        let _ = std::fs::remove_file(tmp.join("a/b/state"));
+        std::os::unix::fs::symlink(home(), tmp.join("a/b/home")).unwrap();
+        std::os::unix::fs::symlink(state_dir(), tmp.join("a/b/state")).unwrap();
+        assert_eq!(to_local(tmp.join("a/b/home/x").to_str().unwrap()), None);
+        assert_eq!(to_local(tmp.join("a/b/state/config.json").to_str().unwrap()), None);
+        assert_eq!(to_local(tmp.join("a/x").to_str().unwrap()), Some(tmp.join("a/x")));
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use crate::index::Vv;
 use crate::paths::test_dir;
+use std::fs::File;
 use tokio::time::timeout;
 
 mod apply;

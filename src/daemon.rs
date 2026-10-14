@@ -11,7 +11,6 @@ use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +29,7 @@ mod upload;
 
 use batch::batches;
 use conn::{accept_loop, bind};
+use download::Download;
 use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 
@@ -64,23 +64,6 @@ struct Peer {
     ctl: mpsc::UnboundedSender<Msg>,
     /// File data. Bounded, so a slow peer slows the upload down instead of filling RAM.
     data: mpsc::Sender<Msg>,
-}
-
-struct Download {
-    from: String,
-    meta: FileMeta,
-    tmp: PathBuf,
-    file: File,
-    hasher: blake3::Hasher,
-    written: u64,
-    /// Other nodes that offered the same content, to fall back on if `from` goes down.
-    alts: Vec<String>,
-}
-
-impl Download {
-    fn new(from: &str, meta: FileMeta, tmp: PathBuf, file: File) -> Self {
-        Download { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
-    }
 }
 
 struct Daemon {

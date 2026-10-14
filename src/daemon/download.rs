@@ -1,4 +1,4 @@
-use super::{Daemon, Download, MAX_DOWNLOADS};
+use super::{Daemon, MAX_DOWNLOADS};
 use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;
 use crate::net::Msg;
@@ -7,8 +7,25 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
+
+pub(super) struct Download {
+    pub(super) from: String,
+    pub(super) meta: FileMeta,
+    pub(super) tmp: PathBuf,
+    pub(super) file: File,
+    pub(super) hasher: blake3::Hasher,
+    pub(super) written: u64,
+    /// Other nodes that offered the same content, to fall back on if `from` goes down.
+    pub(super) alts: Vec<String>,
+}
+
+impl Download {
+    pub(super) fn new(from: &str, meta: FileMeta, tmp: PathBuf, file: File) -> Self {
+        Download { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
+    }
+}
 
 impl Daemon {
     pub(super) fn start_download(&mut self, from: &str, p: &str, r: FileMeta) {

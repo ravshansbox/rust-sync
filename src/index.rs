@@ -14,7 +14,7 @@ pub struct Vv(pub Vec<(u64, u64)>);
 
 /// How one version vector relates to another.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Order {
+enum Order {
     /// Both have seen exactly the same changes.
     Equal,
     /// `self` has seen every change in `other`, and more.
@@ -50,7 +50,7 @@ impl Vv {
     }
 
     /// How `self` relates to `other`.
-    pub fn compare(&self, other: &Self) -> Order {
+    fn compare(&self, other: &Self) -> Order {
         let (mut newer, mut older) = (false, false);
         for &(n, _) in self.0.iter().chain(&other.0) {
             let (a, b) = (self.get(n), other.get(n));

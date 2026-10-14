@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Listen on this port, and dial it when a peer address has no port.
-pub const DEFAULT_PORT: u16 = 21987;
+const DEFAULT_PORT: u16 = 21987;
 
 /// When an entry was last changed: a clock value and the ID of the node that changed it. Higher stamps win.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

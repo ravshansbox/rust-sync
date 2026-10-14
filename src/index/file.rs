@@ -21,7 +21,7 @@ pub fn stat(p: &Path) -> Option<Stat> {
 }
 
 /// Nanoseconds since the Unix epoch, negative for times before it.
-pub fn nanos(t: SystemTime) -> i64 {
+fn nanos(t: SystemTime) -> i64 {
     match t.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_nanos() as i64,
         Err(e) => -(e.duration().as_nanos() as i64),

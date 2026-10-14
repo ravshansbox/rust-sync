@@ -13,9 +13,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 
 /// Wait this long after the last change before reading a file.
-pub(super) const SETTLE: Duration = Duration::from_millis(500);
+const SETTLE: Duration = Duration::from_millis(500);
 /// ...but never longer than this, for files that change all the time.
-pub(super) const SETTLE_MAX: Duration = Duration::from_secs(3);
+const SETTLE_MAX: Duration = Duration::from_secs(3);
 
 /// Collect watcher events until things go quiet, then pass them on as one batch.
 pub(super) async fn debounce(mut rx: mpsc::UnboundedReceiver<Option<PathBuf>>, tx: mpsc::UnboundedSender<Event>) {

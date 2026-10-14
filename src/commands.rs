@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 mod node;
 mod path;
 use node::node_add;
-use path::{path_add, removal_path};
+use path::{path_add, path_list, removal_path};
 
 pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
@@ -38,12 +38,6 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
 
 fn id() -> anyhow::Result<()> {
     outln!("{}", net::pretty_id(&my_keys()?.id()));
-    Ok(())
-}
-
-fn path_list() -> anyhow::Result<()> {
-    // The daemon saves every change to the config file, so this is current either way.
-    out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
     Ok(())
 }
 

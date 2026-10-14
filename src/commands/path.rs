@@ -1,8 +1,9 @@
-//! Checking paths before adding or removing them.
+//! Listing paths, and checking them before adding or removing them.
 
 use super::send;
+use crate::config::Config;
 use crate::ctl::Req;
-use crate::paths;
+use crate::{daemon, paths};
 use anyhow::{Context, bail};
 use std::path::PathBuf;
 
@@ -16,6 +17,12 @@ pub(super) async fn path_add(path: PathBuf) -> anyhow::Result<()> {
         .filter(|p| paths::to_local(p).is_some())
         .with_context(|| format!("cannot sync {}", abs.display()))?;
     send(Req::AddPath { path: portable, is_dir }).await
+}
+
+pub(super) fn path_list() -> anyhow::Result<()> {
+    // The daemon saves every change to the config file, so this is current either way.
+    out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
+    Ok(())
 }
 
 pub(super) fn removal_path(path: PathBuf) -> anyhow::Result<String> {

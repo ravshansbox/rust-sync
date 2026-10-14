@@ -16,7 +16,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::net::UnixListener;
 use tokio::sync::{Semaphore, mpsc, oneshot};
 
 mod batch;
@@ -31,7 +31,7 @@ mod text;
 mod upload;
 
 use batch::batches;
-use conn::accept_loop;
+use conn::{accept_loop, bind};
 use tasks::{ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 
@@ -138,13 +138,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
 
     let watcher = watch(tx.clone())?;
 
-    // "::" also accepts IPv4 on macOS (net.inet6.ip6.v6only is 0 by default).
-    let listener = match TcpListener::bind(("::", cfg.port)).await {
-        Ok(l) => l,
-        Err(_) => TcpListener::bind(("0.0.0.0", cfg.port))
-            .await
-            .with_context(|| format!("cannot listen on port {}", cfg.port))?,
-    };
+    let listener = bind(cfg.port).await?;
     tokio::spawn(accept_loop(listener, keys.clone(), tx.clone(), cfg.port));
 
     let sock = ctl::socket_path()?;

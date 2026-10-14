@@ -6,7 +6,7 @@ use super::upload::upload;
 use std::path::Path;
 use crate::index::{Action, Vv};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
 fn meta(mtime: i64, by: u64) -> FileMeta {

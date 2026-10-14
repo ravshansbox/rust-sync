@@ -20,6 +20,16 @@ const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 static NEXT_CONN: AtomicU64 = AtomicU64::new(1);
 
+pub(super) async fn bind(port: u16) -> anyhow::Result<TcpListener> {
+    // "::" also accepts IPv4 on macOS (net.inet6.ip6.v6only is 0 by default).
+    match TcpListener::bind(("::", port)).await {
+        Ok(l) => Ok(l),
+        Err(_) => TcpListener::bind(("0.0.0.0", port))
+            .await
+            .with_context(|| format!("cannot listen on port {port}")),
+    }
+}
+
 pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
     loop {
         match l.accept().await {

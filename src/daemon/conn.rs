@@ -25,6 +25,7 @@ const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
 static NEXT_CONN: AtomicU64 = AtomicU64::new(1);
 
+/// Listen on `port` on all addresses, IPv6 first and IPv4 if that fails.
 pub(super) async fn bind(port: u16) -> anyhow::Result<TcpListener> {
     // "::" also accepts IPv4 on macOS (net.inet6.ip6.v6only is 0 by default).
     match TcpListener::bind(("::", port)).await {
@@ -35,6 +36,7 @@ pub(super) async fn bind(port: u16) -> anyhow::Result<TcpListener> {
     }
 }
 
+/// Accept incoming connections for ever, handling each in its own task.
 pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
     loop {
         match l.accept().await {
@@ -46,6 +48,8 @@ pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::Unbou
     }
 }
 
+/// Connect to node `id` at `addr` and handle the connection, then send `DialDone`.
+/// `quiet` hides the log line when the node cannot be reached.
 pub(super) async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
     let addr = config::with_port(&addr);
     match timeout(DIAL_TIMEOUT, connect_any(&addr)).await {
@@ -91,6 +95,7 @@ pub(super) async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
     }
 }
 
+/// Alternate IPv6 and IPv4 addresses, starting with IPv6, then append any left over.
 fn interleave(addrs: impl Iterator<Item = SocketAddr>) -> Vec<SocketAddr> {
     let (v6, v4): (Vec<SocketAddr>, Vec<SocketAddr>) = addrs.partition(SocketAddr::is_ipv6);
     let mut order = Vec::with_capacity(v6.len() + v4.len());
@@ -118,6 +123,7 @@ async fn connection(
     }
 }
 
+/// Do the handshake and hello exchange, then serve the connection if both sides trust each other.
 pub(super) async fn connection_inner(
     s: TcpStream,
     ip: IpAddr,

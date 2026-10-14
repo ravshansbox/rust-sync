@@ -1,6 +1,6 @@
 use super::LABEL;
 use crate::paths;
-use anyhow::Context;
+use anyhow::{Context, bail};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -56,6 +56,14 @@ impl Mode {
         };
         cmd.args(args).output().context("cannot run launchctl")
     }
+}
+
+/// Ask for the password once, so later `sudo` calls do not prompt with their output hidden.
+pub(super) fn sudo_login() -> anyhow::Result<()> {
+    if !Command::new("sudo").arg("-v").status().context("cannot run sudo")?.success() {
+        bail!("sudo failed");
+    }
+    Ok(())
 }
 
 pub(super) fn uid() -> anyhow::Result<u32> {

@@ -10,9 +10,8 @@
 
 use crate::ctl::{self, Req};
 use crate::paths;
-use anyhow::{Context, bail};
+use anyhow::bail;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 mod launchd;
@@ -20,7 +19,7 @@ mod mode;
 mod plist;
 
 use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload};
-use mode::{Mode, uid};
+use mode::{Mode, sudo_login, uid};
 use plist::{plist_xml, remove_plist, write_plist};
 
 const LABEL: &str = "com.github.ravshansbox.rust-sync";
@@ -32,14 +31,6 @@ fn log_path() -> PathBuf {
 /// When the daemon starts by itself ("login" or "boot"), or `None` if it is not installed.
 pub fn starts_at() -> Option<&'static str> {
     Mode::installed().map(Mode::when)
-}
-
-/// Ask for the password once, so later `sudo` calls do not prompt with their output hidden.
-fn sudo_login() -> anyhow::Result<()> {
-    if !Command::new("sudo").arg("-v").status().context("cannot run sudo")?.success() {
-        bail!("sudo failed");
-    }
-    Ok(())
 }
 
 pub async fn install(system: bool) -> anyhow::Result<()> {

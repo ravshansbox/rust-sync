@@ -44,17 +44,27 @@ const RESCAN_TICKS: u64 = 30;
 
 /// Something for the daemon's event loop to handle, sent by the watcher, timers, connections and the control socket.
 enum Event {
+    /// The watcher saw changes to these paths.
     Fs(Vec<PathBuf>),
+    /// The watcher lost track of changes, so every root must be scanned again.
     Rescan,
+    /// The periodic timer fired.
     Tick,
     /// A peer finished the handshake. Reply with whether we trust it.
     Auth { id: String, addr: Option<String>, reply: oneshot::Sender<bool> },
+    /// A trusted peer connected. `ctl` and `data` send messages to it; `data` is bounded so file data cannot flood memory.
     Up { id: String, conn: u64, outbound: bool, ctl: mpsc::UnboundedSender<Msg>, data: mpsc::Sender<Msg> },
+    /// Connection `conn` to a peer closed.
     Down { id: String, conn: u64 },
+    /// An outgoing dial attempt ended, whether or not it connected.
     DialDone { id: String },
+    /// The backoff wait for a node is over, so try to reach it again.
     Redial { id: String },
+    /// A peer sent a message on connection `conn`.
     Peer { id: String, conn: u64, msg: Msg },
+    /// A request from the control socket, with a channel for the reply.
     Ctl(Req, oneshot::Sender<Resp>),
+    /// Stop the daemon.
     Shutdown,
 }
 

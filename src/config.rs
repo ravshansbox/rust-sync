@@ -102,23 +102,25 @@ impl Config {
         let mut changed = false;
         for (id, n) in &other.nodes {
             self.clock = self.clock.max(n.stamp.0);
-            if id == me {
-                continue;
-            }
-            if self.shared.nodes.get(id).is_none_or(|ours| n.stamp > ours.stamp) {
-                self.shared.nodes.insert(id.clone(), n.clone());
-                changed = true;
+            if id != me {
+                changed |= take_newer(&mut self.shared.nodes, id, n, |n| &n.stamp);
             }
         }
         for (path, r) in &other.roots {
             self.clock = self.clock.max(r.stamp.0);
-            if self.shared.roots.get(path).is_none_or(|ours| r.stamp > ours.stamp) {
-                self.shared.roots.insert(path.clone(), r.clone());
-                changed = true;
-            }
+            changed |= take_newer(&mut self.shared.roots, path, r, |r| &r.stamp);
         }
         changed
     }
+}
+
+/// Store `theirs` under `key` if its stamp is higher than ours. Returns true if stored.
+fn take_newer<T: Clone>(ours: &mut BTreeMap<String, T>, key: &str, theirs: &T, stamp: impl Fn(&T) -> &Stamp) -> bool {
+    if ours.get(key).is_some_and(|o| stamp(theirs) <= stamp(o)) {
+        return false;
+    }
+    ours.insert(key.into(), theirs.clone());
+    true
 }
 
 /// Add the default port if the address has none.

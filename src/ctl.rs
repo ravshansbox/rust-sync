@@ -33,6 +33,7 @@ pub fn socket_path() -> anyhow::Result<PathBuf> {
     socket_path_in(crate::paths::state_dir(), Path::new("/tmp"))
 }
 
+/// The socket path for state folder `state`, using `tmp` for the fallback folder.
 fn socket_path_in(state: &Path, tmp: &Path) -> anyhow::Result<PathBuf> {
     let p = state.join("ctl.sock");
     if p.as_os_str().len() < 100 {
@@ -55,6 +56,7 @@ pub async fn call(req: &Req) -> anyhow::Result<Option<Resp>> {
     call_at(&socket_path()?, req).await
 }
 
+/// Send a request to the daemon listening on `sock`. `Ok(None)` means no daemon answered.
 async fn call_at(sock: &Path, req: &Req) -> anyhow::Result<Option<Resp>> {
     let Ok(s) = UnixStream::connect(sock).await else { return Ok(None) };
     let (r, mut w) = s.into_split();

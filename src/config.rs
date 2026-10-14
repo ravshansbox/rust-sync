@@ -157,6 +157,15 @@ mod tests {
     }
 
     #[test]
+    fn with_port_keeps_link_local_ipv6_addresses_with_a_zone_resolvable() {
+        use std::net::ToSocketAddrs;
+        let want = "[fe80::1%1]:21987".parse::<std::net::SocketAddr>().unwrap();
+        for addr in ["fe80::1%lo0", "fe80::1%1", "fe80::1%lo0:21987"] {
+            assert_eq!(with_port(addr).to_socket_addrs().unwrap().collect::<Vec<_>>(), [want], "{addr}");
+        }
+    }
+
+    #[test]
     fn set_root_and_set_node_bump_the_clock() {
         let mut c = Config::default();
         c.set_root("me", "~/a", true, false);

@@ -119,12 +119,17 @@ pub fn ignored(name: &str) -> bool {
 mod tests {
     use super::*;
 
-    #[test]
-    fn state_folder_from_env_is_resolved_through_symlinks() {
-        let tmp = std::env::temp_dir().join(format!("rust-sync-state-env-{}", std::process::id()));
+    fn real_and_link(name: &str) -> PathBuf {
+        let tmp = std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()));
         std::fs::create_dir_all(tmp.join("real")).unwrap();
         let _ = std::fs::remove_file(tmp.join("link"));
         std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        tmp
+    }
+
+    #[test]
+    fn state_folder_from_env_is_resolved_through_symlinks() {
+        let tmp = real_and_link("state-env");
         let want = tmp.canonicalize().unwrap().join("real/.rust-sync");
         assert_eq!(resolve_parent(tmp.join("link/.rust-sync")), want);
         assert_eq!(resolve_parent(tmp.join("link/../real/.rust-sync")), want);
@@ -133,20 +138,14 @@ mod tests {
 
     #[test]
     fn state_folder_from_env_that_is_a_symlink_is_resolved_to_its_target() {
-        let tmp = std::env::temp_dir().join(format!("rust-sync-state-env-link-{}", std::process::id()));
-        std::fs::create_dir_all(tmp.join("real")).unwrap();
-        let _ = std::fs::remove_file(tmp.join("link"));
-        std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        let tmp = real_and_link("state-env-link");
         assert_eq!(resolve_parent(tmp.join("link")), tmp.canonicalize().unwrap().join("real"));
         std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]
     fn state_folder_from_env_is_resolved_when_its_parent_folders_do_not_exist_yet() {
-        let tmp = std::env::temp_dir().join(format!("rust-sync-state-env-new-{}", std::process::id()));
-        std::fs::create_dir_all(tmp.join("real")).unwrap();
-        let _ = std::fs::remove_file(tmp.join("link"));
-        std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();
+        let tmp = real_and_link("state-env-new");
         let want = tmp.canonicalize().unwrap().join("real/new/dir/.rust-sync");
         assert_eq!(resolve_parent(tmp.join("link/new/dir/.rust-sync")), want);
         assert_eq!(resolve_parent(tmp.join("link/new/gone/../dir/.rust-sync")), want);

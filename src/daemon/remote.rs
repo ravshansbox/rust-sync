@@ -34,19 +34,7 @@ impl Daemon {
             Action::Nothing | Action::LocalWins => {}
             Action::Same => self.adopt(p, lp, local, r),
             Action::Take | Action::Conflict if same_content => self.adopt(p, lp, local, r),
-            Action::Take | Action::Conflict if r.deleted() => {
-                if local.as_ref().is_some_and(|l| !l.deleted()) {
-                    match std::fs::remove_file(lp) {
-                        Ok(()) => {
-                            log!("deleted {p}");
-                            self.remove_empty_parents(p, lp);
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(e) => return log!("cannot delete {p}: {e}"),
-                    }
-                }
-                self.set_entry(p, r);
-            }
+            Action::Take | Action::Conflict if r.deleted() => self.delete(p, lp, local.as_ref(), r),
             Action::Take | Action::Conflict => match tmp.take() {
                 None => self.start_download(from, p, r),
                 Some(t) => self.install(p, lp, &t, local.as_ref().filter(|_| action == Action::Conflict), r),
@@ -56,6 +44,20 @@ impl Daemon {
             let _ = std::fs::remove_file(t);
             self.remove_empty_parents(p, lp);
         }
+    }
+
+    fn delete(&mut self, p: &str, lp: &Path, local: Option<&FileMeta>, r: FileMeta) {
+        if local.is_some_and(|l| !l.deleted()) {
+            match std::fs::remove_file(lp) {
+                Ok(()) => {
+                    log!("deleted {p}");
+                    self.remove_empty_parents(p, lp);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return log!("cannot delete {p}: {e}"),
+            }
+        }
+        self.set_entry(p, r);
     }
 
     fn install(&mut self, p: &str, lp: &Path, t: &Path, conflict: Option<&FileMeta>, mut r: FileMeta) {

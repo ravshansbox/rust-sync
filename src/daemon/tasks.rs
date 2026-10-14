@@ -1,5 +1,6 @@
 use super::{Event, TICK};
 use crate::ctl::Resp;
+use notify::RecommendedWatcher;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -35,6 +36,17 @@ pub(super) async fn debounce(mut rx: mpsc::UnboundedReceiver<Option<PathBuf>>, t
             return;
         }
     }
+}
+
+/// Start the file watcher. It runs on its own thread and hands raw paths to `debounce`.
+pub(super) fn watch(tx: mpsc::UnboundedSender<Event>) -> notify::Result<RecommendedWatcher> {
+    let (fs_tx, fs_rx) = mpsc::unbounded_channel::<Option<PathBuf>>();
+    let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
+        Ok(ev) if !ev.need_rescan() => ev.paths.into_iter().for_each(|p| drop(fs_tx.send(Some(p)))),
+        _ => drop(fs_tx.send(None)),
+    })?;
+    tokio::spawn(debounce(fs_rx, tx));
+    Ok(watcher)
 }
 
 /// Answer CLI requests, one JSON line per connection.

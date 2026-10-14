@@ -32,7 +32,7 @@ mod upload;
 
 use batch::batches;
 use conn::accept_loop;
-use tasks::{ctl_loop, debounce, shutdown_on_signal, tick_loop};
+use tasks::{ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 
 const TICK: Duration = Duration::from_secs(30);
@@ -136,13 +136,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     cfg.save(&config_file)?;
     let (tx, mut rx) = mpsc::unbounded_channel();
 
-    // File watcher. It runs on its own thread and hands raw paths to `debounce`.
-    let (fs_tx, fs_rx) = mpsc::unbounded_channel::<Option<PathBuf>>();
-    let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
-        Ok(ev) if !ev.need_rescan() => ev.paths.into_iter().for_each(|p| drop(fs_tx.send(Some(p)))),
-        _ => drop(fs_tx.send(None)),
-    })?;
-    tokio::spawn(debounce(fs_rx, tx.clone()));
+    let watcher = watch(tx.clone())?;
 
     // "::" also accepts IPv4 on macOS (net.inet6.ip6.v6only is 0 by default).
     let listener = match TcpListener::bind(("::", cfg.port)).await {

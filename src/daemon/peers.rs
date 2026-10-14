@@ -1,13 +1,23 @@
 use super::batch::{batches, config_batches};
 use super::conn::dial;
-use super::{Daemon, Event, MAX_PENDING, Peer};
+use super::{Daemon, Event, MAX_PENDING};
 use crate::index::Entry;
 use crate::log::log;
 use crate::net::{self, Msg};
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 /// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
 pub(super) const MAX_BACKOFF: Duration = super::TICK;
+
+pub(super) struct Peer {
+    pub(super) conn: u64,
+    pub(super) outbound: bool,
+    /// Small messages: config, index, requests.
+    pub(super) ctl: mpsc::UnboundedSender<Msg>,
+    /// File data. Bounded, so a slow peer slows the upload down instead of filling RAM.
+    pub(super) data: mpsc::Sender<Msg>,
+}
 
 impl Daemon {
     pub(super) fn peer_up(&mut self, id: String, peer: Peer) {

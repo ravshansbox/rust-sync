@@ -30,6 +30,7 @@ mod upload;
 use batch::batches;
 use conn::{accept_loop, bind};
 use download::Download;
+use peers::Peer;
 use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 
@@ -55,15 +56,6 @@ enum Event {
     Peer { id: String, conn: u64, msg: Msg },
     Ctl(Req, oneshot::Sender<Resp>),
     Shutdown,
-}
-
-struct Peer {
-    conn: u64,
-    outbound: bool,
-    /// Small messages: config, index, requests.
-    ctl: mpsc::UnboundedSender<Msg>,
-    /// File data. Bounded, so a slow peer slows the upload down instead of filling RAM.
-    data: mpsc::Sender<Msg>,
 }
 
 struct Daemon {

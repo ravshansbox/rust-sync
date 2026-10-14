@@ -1,5 +1,5 @@
-use super::Mode;
 use super::plist::remove_plist;
+use super::{Mode, POLL_INTERVAL, POLL_TRIES};
 use crate::ctl;
 use anyhow::{Context, bail};
 use std::process::Command;
@@ -31,11 +31,11 @@ pub(super) fn loaded(mode: Mode) -> anyhow::Result<bool> {
 pub(super) fn unload(mode: Mode) -> anyhow::Result<()> {
     // Fails harmlessly if the job is not loaded.
     let _ = mode.launchctl(&["bootout", &mode.target()?]);
-    for _ in 0..50 {
+    for _ in 0..POLL_TRIES {
         if !ctl::socket_path()?.exists() {
             return Ok(());
         }
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(POLL_INTERVAL);
     }
     Ok(())
 }

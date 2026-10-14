@@ -23,6 +23,10 @@ use mode::{Mode, sudo_login, uid};
 use plist::{plist_xml, write_plist};
 
 const LABEL: &str = "com.github.ravshansbox.rust-sync";
+/// Check this often while waiting for the daemon to start or stop.
+const POLL_INTERVAL: Duration = Duration::from_millis(100);
+/// Give up after this many checks (5 seconds).
+const POLL_TRIES: u32 = 50;
 
 fn log_path() -> PathBuf {
     paths::home().join("Library/Logs/rust-sync.log")
@@ -160,11 +164,11 @@ async fn running() -> anyhow::Result<bool> {
 
 /// Wait up to 5 seconds for the daemon to be running (or stopped).
 async fn wait_for(want: bool) -> anyhow::Result<bool> {
-    for _ in 0..50 {
+    for _ in 0..POLL_TRIES {
         if running().await? == want {
             return Ok(true);
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
     Ok(false)
 }

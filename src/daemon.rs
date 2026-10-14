@@ -665,6 +665,7 @@ impl Daemon {
                     }
                     let mut kept = None;
                     if let (Action::Conflict, Some(l)) = (&action, &local)
+                        && !l.deleted()
                         && lp.exists()
                     {
                         let copy = conflict_name(lp, l);
@@ -2459,6 +2460,27 @@ mod tests {
         assert!(lp.is_dir());
         assert!(d.index.is_empty());
         assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn downloaded_change_that_beats_a_local_deletion_does_not_move_a_folder_now_at_its_path() {
+        let mut d = daemon();
+        let dir = test_dir("deleted-became-folder");
+        let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
+        std::fs::create_dir_all(&lp).unwrap();
+        std::fs::write(lp.join("a"), "mine").unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(5, 1);
+        (local.hash, local.vv) = (None, Vv(vec![(1, 1)]));
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let mut r = meta(1, 2);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r, Some(tmp.clone()));
+        assert_eq!(std::fs::read_to_string(lp.join("a")).unwrap(), "mine");
+        assert!(!conflict_name(&lp, &local).exists());
+        assert!(!tmp.exists());
+        assert_eq!(d.index["~/s/f.txt"], local);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

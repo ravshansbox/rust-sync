@@ -506,7 +506,7 @@ impl Daemon {
             return;
         }
         let Some(p) = paths::to_portable(lp) else { return };
-        let Some(root) = self.cfg.root_of(&p).and_then(paths::to_local) else { return };
+        let Some(root) = self.local_root(&p) else { return };
         if !paths::through_symlink(lp, &root) {
             self.check_tree(&p);
         }
@@ -530,7 +530,7 @@ impl Daemon {
             .collect();
         for k in missing {
             let Some(l) = paths::to_local(&k) else { continue };
-            let root = self.cfg.root_of(&k).and_then(paths::to_local);
+            let root = self.local_root(&k);
             let st = index::stat(&l).filter(|_| !root.is_some_and(|r| paths::through_symlink(&l, &r)));
             self.check_stat(&k, &l, st);
         }
@@ -561,6 +561,10 @@ impl Daemon {
 
     fn below_file_root(&self, p: &str) -> bool {
         self.cfg.active_roots().any(|(r, re)| !re.is_dir && r != p && paths::is_under(p, r))
+    }
+
+    fn local_root(&self, p: &str) -> Option<PathBuf> {
+        self.cfg.root_of(p).and_then(paths::to_local)
     }
 
     /// Compare one file on disk with the index. Records and announces local changes.
@@ -620,7 +624,7 @@ impl Daemon {
 
     fn on_entry(&mut self, from: &str, mut e: Entry) {
         e.meta.mode &= 0o777;
-        let Some(root) = self.cfg.root_of(&e.path).and_then(paths::to_local) else { return };
+        let Some(root) = self.local_root(&e.path) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
         if !e.meta.deleted() && (self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || self.below_file_root(&e.path)) || paths::through_symlink(&lp, &root) {
             return;
@@ -700,7 +704,7 @@ impl Daemon {
     }
 
     fn remove_empty_parents(&self, p: &str, lp: &Path) {
-        if let Some(root) = self.cfg.root_of(p).and_then(paths::to_local) {
+        if let Some(root) = self.local_root(p) {
             let _ = lp
                 .ancestors()
                 .skip(1)
@@ -812,7 +816,7 @@ impl Daemon {
         let _ = d.file.set_permissions(std::fs::Permissions::from_mode(d.meta.mode));
         drop(d.file);
         let Some(lp) = paths::to_local(path) else { return };
-        if self.cfg.root_of(path).and_then(paths::to_local).is_some_and(|r| paths::through_symlink(&lp, &r)) {
+        if self.local_root(path).is_some_and(|r| paths::through_symlink(&lp, &r)) {
             let _ = std::fs::remove_file(&d.tmp);
             return;
         }
@@ -856,7 +860,7 @@ impl Daemon {
 
     fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
         let Some(peer) = self.peers.get(from) else { return };
-        let root = self.cfg.root_of(&path).and_then(paths::to_local);
+        let root = self.local_root(&path);
         let ok = root.is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
         let safe = |lp: &Path| index::stat(lp).is_some() && !root.as_ref().is_some_and(|r| paths::through_symlink(lp, r));
         match paths::to_local(&path) {

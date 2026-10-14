@@ -1,6 +1,6 @@
 //! Adding a node after checking its ID.
 
-use super::{my_keys, send};
+use super::{my_keys, node_id, send};
 use crate::cli::NodeAdd;
 use crate::config::{self, Config};
 use crate::ctl::Req;
@@ -15,7 +15,7 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     let keys = my_keys()?;
     let cfg = Config::load(&paths::config_file())?;
     let addr = config::with_port(&a.addr);
-    let expected = a.id.as_deref().map(|s| net::parse_id(s).context("not a valid node ID")).transpose()?;
+    let expected = a.id.as_deref().map(node_id).transpose()?;
 
     outln!("Connecting to {addr}...");
     let stream = timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(&addr))

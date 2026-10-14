@@ -32,7 +32,7 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Node { cmd: NodeCmd::Add(a) } => node_add(a).await,
         Cmd::Node { cmd: NodeCmd::List } => send(Req::ListNodes).await,
         Cmd::Node { cmd: NodeCmd::Remove { id } } => {
-            send(Req::RemoveNode { id: net::parse_id(&id).context("not a valid node ID")? }).await
+            send(Req::RemoveNode { id: node_id(&id)? }).await
         }
         Cmd::Service { cmd: ServiceCmd::Install { system } } => service::install(system).await,
         Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall(),
@@ -52,6 +52,10 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
 
 fn my_keys() -> anyhow::Result<net::Keys> {
     net::load_or_create_keys(paths::state_dir())
+}
+
+fn node_id(s: &str) -> anyhow::Result<String> {
+    net::parse_id(s).context("not a valid node ID")
 }
 
 /// Send a change to the running daemon. If none is running, edit the config file.

@@ -24,8 +24,10 @@ use tokio::net::{TcpListener, TcpStream, UnixListener};
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::time::timeout;
 
+mod batch;
 mod text;
 
+use batch::{batches, config_batches};
 pub use text::{nodes_text, paths_text, status_text};
 
 /// Wait this long after the last change before reading a file.
@@ -42,7 +44,6 @@ const MAX_UPLOADS: usize = 8;
 /// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
 /// connection attempts can't grow the list without end.
 const MAX_PENDING: usize = 20;
-const BATCH_LIMIT: usize = 40_000;
 /// Happy Eyeballs (RFC 8305): start the next address after this long, without
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
@@ -914,47 +915,6 @@ fn conflict_name(lp: &Path, loser: &FileMeta) -> PathBuf {
         stem.pop();
     }
     lp.with_file_name(format!("{stem}.{tag}{ext}"))
-}
-
-/// Split entries into messages that fit in one frame.
-fn batches(entries: Vec<Entry>) -> Vec<Vec<Entry>> {
-    let (mut out, mut cur, mut size) = (Vec::new(), Vec::new(), 0);
-    for e in entries {
-        let s = e.path.len() + 100 + e.meta.vv.0.len() * 20;
-        if size + s > BATCH_LIMIT && !cur.is_empty() {
-            out.push(std::mem::take(&mut cur));
-            size = 0;
-        }
-        size += s;
-        cur.push(e);
-    }
-    if !cur.is_empty() {
-        out.push(cur);
-    }
-    out
-}
-
-/// Split the shared config into parts that each fit in one message.
-fn config_batches(shared: &Shared) -> Vec<Shared> {
-    let mut out = vec![Shared::default()];
-    let mut size = 0;
-    let mut add = |s: usize, put: &mut dyn FnMut(&mut Shared)| {
-        if size + s > BATCH_LIMIT && out.last().is_some_and(|c| !c.nodes.is_empty() || !c.roots.is_empty()) {
-            out.push(Shared::default());
-            size = 0;
-        }
-        size += s;
-        put(out.last_mut().unwrap());
-    };
-    for (id, n) in &shared.nodes {
-        let s = postcard::to_stdvec(&(id, n)).map_or(0, |b| b.len());
-        add(s, &mut |c| drop(c.nodes.insert(id.clone(), n.clone())));
-    }
-    for (path, r) in &shared.roots {
-        let s = postcard::to_stdvec(&(path, r)).map_or(0, |b| b.len());
-        add(s, &mut |c| drop(c.roots.insert(path.clone(), r.clone())));
-    }
-    out
 }
 
 // ---- Tasks ----

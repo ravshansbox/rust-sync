@@ -13,6 +13,7 @@ use std::time::{Duration, UNIX_EPOCH};
 /// Most files downloaded at once; further files wait in the queue.
 pub(super) const MAX_DOWNLOADS: usize = 8;
 
+/// A file being received into a temporary file, hashed as it arrives.
 pub(super) struct Download {
     pub(super) from: String,
     pub(super) meta: FileMeta,

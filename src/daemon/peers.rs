@@ -15,6 +15,7 @@ pub(super) const MAX_BACKOFF: Duration = super::TICK;
 /// connection attempts can't grow the list without end.
 pub(super) const MAX_PENDING: usize = 20;
 
+/// A connected, trusted peer and the channels for sending to it.
 pub(super) struct Peer {
     pub(super) conn: u64,
     pub(super) outbound: bool,

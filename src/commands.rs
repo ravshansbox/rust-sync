@@ -67,11 +67,11 @@ async fn send(req: Req) -> anyhow::Result<()> {
         outln!("{}", resp.text.trim_end());
         return Ok(());
     }
-    send_offline(req)
+    send_offline(&req)
 }
 
 /// Handle a request without a daemon: print status or nodes from the config file, or apply a change to it.
-fn send_offline(req: Req) -> anyhow::Result<()> {
+fn send_offline(req: &Req) -> anyhow::Result<()> {
     let me = my_keys()?.id();
     let path = paths::config_file();
     let mut cfg = Config::load(&path)?;
@@ -88,7 +88,7 @@ fn send_offline(req: Req) -> anyhow::Result<()> {
         }
         _ => {}
     }
-    let text = ctl::apply(&mut cfg, &me, &req).map_err(anyhow::Error::msg)?;
+    let text = ctl::apply(&mut cfg, &me, req).map_err(anyhow::Error::msg)?;
     cfg.save(&path)?;
     outln!("{text}\n(The daemon is not running. This takes effect when it starts.)");
     Ok(())

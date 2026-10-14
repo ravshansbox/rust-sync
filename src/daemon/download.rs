@@ -85,6 +85,10 @@ impl Daemon {
             return;
         }
         let d = self.downloads.remove(path).unwrap();
+        self.finish_download(from, path, d);
+    }
+
+    fn finish_download(&mut self, from: &str, path: &str, d: Download) {
         if Some(*d.hasher.finalize().as_bytes()) != d.meta.hash {
             log!("{path} changed while being sent; will retry");
             return self.retry_elsewhere(path.to_string(), d, from);

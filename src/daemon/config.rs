@@ -29,21 +29,7 @@ impl Daemon {
         if let Err(e) = self.cfg.save(&self.config_file) {
             log!("cannot save config: {e}");
         }
-        let gone: Vec<String> = self.peers.extract_if(|id, _| self.cfg.trusted(id).is_none()).map(|(id, _)| id).collect();
-        for id in gone {
-            self.drop_downloads_from(&id);
-        }
-        let unwanted: Vec<String> = self
-            .downloads
-            .keys()
-            .chain(self.queued.keys())
-            .filter(|p| !self.is_synced(p))
-            .cloned()
-            .collect();
-        for p in unwanted {
-            self.cancel_download(&p);
-            self.queued.remove(&p);
-        }
+        self.drop_unwanted();
         self.reconcile_watches();
         let after = self.active_roots();
         for (root, _) in after.difference(before) {
@@ -60,6 +46,24 @@ impl Daemon {
             self.broadcast(&Msg::Config(shared));
         }
         self.dial_all();
+    }
+
+    fn drop_unwanted(&mut self) {
+        let gone: Vec<String> = self.peers.extract_if(|id, _| self.cfg.trusted(id).is_none()).map(|(id, _)| id).collect();
+        for id in gone {
+            self.drop_downloads_from(&id);
+        }
+        let unwanted: Vec<String> = self
+            .downloads
+            .keys()
+            .chain(self.queued.keys())
+            .filter(|p| !self.is_synced(p))
+            .cloned()
+            .collect();
+        for p in unwanted {
+            self.cancel_download(&p);
+            self.queued.remove(&p);
+        }
     }
 
     pub(super) fn on_ctl(&mut self, req: &Req) -> Resp {

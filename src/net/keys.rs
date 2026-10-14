@@ -1,3 +1,5 @@
+//! Loading or creating this node's key pair, and formatting and parsing node IDs.
+
 use super::PARAMS;
 use anyhow::{Context, bail};
 use snow::Builder;

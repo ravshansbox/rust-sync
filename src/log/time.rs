@@ -1,3 +1,5 @@
+//! UTC timestamps for log lines.
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Current time as `2026-09-27 12:34:56Z`.

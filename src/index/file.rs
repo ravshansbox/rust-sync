@@ -1,3 +1,5 @@
+//! Reading and hashing regular files, and the current time in nanoseconds.
+
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};

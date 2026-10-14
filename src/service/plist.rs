@@ -1,3 +1,5 @@
+//! Writing, removing and building the launchd property list (plist) file.
+
 use super::{LABEL, Mode, log_path};
 use crate::paths;
 use anyhow::{Context, bail};

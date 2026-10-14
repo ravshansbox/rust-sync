@@ -1,3 +1,5 @@
+//! Agent or system install, and the launchctl domain, paths and sudo use for each.
+
 use super::LABEL;
 use crate::paths;
 use anyhow::{Context, bail};

@@ -1,3 +1,5 @@
+//! Loading, unloading, stopping and restarting the job with launchctl.
+
 use super::plist::remove_plist;
 use super::{Mode, POLL_INTERVAL, POLL_TRIES};
 use crate::ctl;

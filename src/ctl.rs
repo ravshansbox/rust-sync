@@ -28,17 +28,17 @@ pub struct Resp {
 /// `<state dir>/ctl.sock`. Unix socket paths must be short (104 bytes on macOS),
 /// so for a long state folder path we use a private folder in /tmp, as tmux does.
 pub fn socket_path() -> anyhow::Result<PathBuf> {
-    socket_path_in(crate::paths::state_dir())
+    socket_path_in(crate::paths::state_dir(), Path::new("/tmp"))
 }
 
-fn socket_path_in(state: &Path) -> anyhow::Result<PathBuf> {
+fn socket_path_in(state: &Path, tmp: &Path) -> anyhow::Result<PathBuf> {
     let p = state.join("ctl.sock");
     if p.as_os_str().len() < 100 {
         return Ok(p);
     }
     std::fs::create_dir_all(state)?;
     let uid = std::fs::metadata(state)?.uid();
-    let dir = PathBuf::from(format!("/tmp/rust-sync-{uid}"));
+    let dir = tmp.join(format!("rust-sync-{uid}"));
     let _ = std::fs::DirBuilder::new().mode(0o700).create(&dir);
     let m = std::fs::symlink_metadata(&dir)?;
     if !m.is_dir() || m.uid() != uid || m.mode() & 0o077 != 0 {
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn short_state_folder_keeps_socket_inside() {
         let state = PathBuf::from(format!("/{}", "s".repeat(89)));
-        let p = socket_path_in(&state).unwrap();
+        let p = socket_path_in(&state, Path::new("/tmp")).unwrap();
         assert_eq!(p.as_os_str().len(), 99);
         assert_eq!(p, state.join("ctl.sock"));
         assert!(!state.exists());
@@ -142,7 +142,7 @@ mod tests {
         let pad = 100 - base.as_os_str().len() - "/".len() - "/ctl.sock".len();
         let state = base.join("a".repeat(pad));
         assert_eq!(state.join("ctl.sock").as_os_str().len(), 100);
-        let p = socket_path_in(&state).unwrap();
+        let p = socket_path_in(&state, Path::new("/tmp")).unwrap();
         let uid = std::fs::metadata(&state).unwrap().uid();
         assert_eq!(p.parent().unwrap(), Path::new(&format!("/tmp/rust-sync-{uid}")));
         std::fs::remove_dir_all(&base).unwrap();
@@ -152,15 +152,35 @@ mod tests {
     fn long_state_folder_gets_private_socket_in_tmp() {
         let base = std::env::temp_dir().join(format!("rust-sync-sock-{}", std::process::id()));
         let state = base.join("a".repeat(100));
-        let p = socket_path_in(&state).unwrap();
+        let p = socket_path_in(&state, Path::new("/tmp")).unwrap();
         assert!(p.as_os_str().len() < 104);
-        assert_eq!(p, socket_path_in(&state).unwrap());
-        assert_ne!(p, socket_path_in(&base.join("b".repeat(100))).unwrap());
+        assert_eq!(p, socket_path_in(&state, Path::new("/tmp")).unwrap());
+        assert_ne!(p, socket_path_in(&base.join("b".repeat(100)), Path::new("/tmp")).unwrap());
         let dir = p.parent().unwrap();
         assert_eq!(dir, Path::new(&format!("/tmp/rust-sync-{}", std::fs::metadata(&state).unwrap().uid())));
         assert_eq!(std::fs::metadata(dir).unwrap().mode() & 0o777, 0o700);
         let name = p.file_name().unwrap().to_str().unwrap();
         assert!(name.len() == 21 && name.ends_with(".sock"));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn tmp_socket_folder_that_is_not_private_is_rejected() {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("rust-sync-sock-shared-{}", std::process::id()));
+        let state = base.join("a".repeat(100));
+        std::fs::create_dir_all(&state).unwrap();
+        let dir = base.join(format!("rust-sync-{}", std::fs::metadata(&state).unwrap().uid()));
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::set_permissions(&dir, Permissions::from_mode(0o755)).unwrap();
+        let want = format!("{} is not a private folder owned by you", dir.display());
+        assert_eq!(socket_path_in(&state, &base).unwrap_err().to_string(), want);
+        std::fs::remove_dir(&dir).unwrap();
+        std::fs::create_dir(base.join("real")).unwrap();
+        std::fs::set_permissions(base.join("real"), Permissions::from_mode(0o700)).unwrap();
+        std::os::unix::fs::symlink(base.join("real"), &dir).unwrap();
+        assert_eq!(socket_path_in(&state, &base).unwrap_err().to_string(), want);
         std::fs::remove_dir_all(&base).unwrap();
     }
 

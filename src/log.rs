@@ -45,7 +45,7 @@ impl LogFile {
     }
 
     fn write(&mut self, text: &str) {
-        if self.size + text.len() as u64 > MAX_SIZE {
+        if self.size > 0 && self.size + text.len() as u64 > MAX_SIZE {
             let _ = self.rotate();
         }
         if self.file.write_all(text.as_bytes()).is_ok() {
@@ -163,6 +163,20 @@ mod tests {
         drop(log);
         assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE);
         assert_eq!(std::fs::metadata(&path).unwrap().len(), line_len as u64);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn line_longer_than_max_size_does_not_rotate_an_empty_file_over_the_older_one() {
+        let dir = test_dir("long");
+        let path = dir.join("test.log");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("test.log.1"), "older").unwrap();
+        let mut log = LogFile::open(path.clone()).unwrap();
+        log.write(&"x".repeat(MAX_SIZE as usize + 1));
+        drop(log);
+        assert_eq!(std::fs::read_to_string(dir.join("test.log.1")).unwrap(), "older");
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), MAX_SIZE + 1);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

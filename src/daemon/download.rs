@@ -176,12 +176,15 @@ impl Daemon {
     }
 }
 
+/// Records `from` as a fallback source if it offers the same content as the file
+/// already wanted from `holder`.
 fn add_alt(alts: &mut Vec<String>, holder: &str, held: &FileMeta, from: &str, r: &FileMeta) {
     if holder != from && held.hash == r.hash && !alts.iter().any(|a| a == from) {
         alts.push(from.to_string());
     }
 }
 
+/// Hidden temporary file name for `name`, using its hash if the name would exceed 255 bytes.
 fn tmp_name(name: &OsStr) -> String {
     let mut tmp = format!(".{}.rsync-tmp", name.to_string_lossy());
     if tmp.len() > 255 {

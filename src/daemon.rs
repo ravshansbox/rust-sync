@@ -663,7 +663,9 @@ impl Daemon {
             return;
         }
         // Catch local changes the watcher has not reported yet, before deciding.
-        self.check_file(&e.path, &lp);
+        if self.index.contains_key(&e.path) || !self.not_a_synced_file(&e.path) {
+            self.check_file(&e.path, &lp);
+        }
         self.apply(from, &e.path, &lp, e.meta, None);
     }
 
@@ -3083,6 +3085,27 @@ mod tests {
         d.check_tree(&rp);
         assert_eq!(d.index[&path], old);
         assert!(d.outbox.iter().all(|e| e.path != path));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn remote_deletion_below_a_synced_file_path_does_not_record_or_delete_an_untracked_file() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("deletion-below-file-root");
+        std::fs::create_dir_all(dir.join("s/f")).unwrap();
+        std::fs::write(dir.join("s/f/x"), "x").unwrap();
+        let rp = dir.join("s").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_root(&me, &format!("{rp}/f"), false, false);
+        let path = format!("{rp}/f/x");
+        let mut gone = meta(0, 2);
+        gone.hash = None;
+        gone.mode = 0;
+        gone.vv = Vv(vec![(2, 1)]);
+        d.on_entry("aa", Entry { path: path.clone(), meta: gone });
+        assert!(dir.join("s/f/x").exists());
+        assert!(d.outbox.iter().all(|e| e.path != path || e.meta.deleted()));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

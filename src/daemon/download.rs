@@ -1,10 +1,12 @@
 //! Receiving files from peers into temporary files, with a queue and fallback to other holders.
 
 use super::Daemon;
+use super::peers::Peer;
 use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;
 use crate::net::Msg;
 use crate::paths;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
@@ -153,15 +155,11 @@ impl Daemon {
 
     pub(super) fn drop_downloads_from(&mut self, id: &str) {
         let peers = &self.peers;
-        let fallback = |alts: &mut Vec<String>| {
-            alts.retain(|a| a != id && peers.contains_key(a));
-            (!alts.is_empty()).then(|| alts.remove(0))
-        };
         self.queued.retain(|_, (from, _, alts)| {
             if from != id {
                 return true;
             }
-            fallback(alts).map(|alt| *from = alt).is_some()
+            next_alt(alts, id, peers).map(|alt| *from = alt).is_some()
         });
         let gone: Vec<_> = self.downloads.extract_if(|_, d| d.from == id).collect();
         for (p, d) in gone {
@@ -171,9 +169,7 @@ impl Daemon {
 
     fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
         self.discard_tmp(&p, &d.tmp);
-        d.alts.retain(|a| a != gone && self.peers.contains_key(a));
-        if !d.alts.is_empty() {
-            let alt = d.alts.remove(0);
+        if let Some(alt) = next_alt(&mut d.alts, gone, &self.peers) {
             self.queued.entry(p).or_insert((alt, d.meta, d.alts));
         }
     }
@@ -190,6 +186,12 @@ fn add_alt(alts: &mut Vec<String>, holder: &str, held: &FileMeta, from: &str, r:
     if holder != from && held.hash == r.hash && !alts.iter().any(|a| a == from) {
         alts.push(from.to_string());
     }
+}
+
+/// Drops `gone` and disconnected nodes from `alts`, then takes the first one left.
+fn next_alt(alts: &mut Vec<String>, gone: &str, peers: &HashMap<String, Peer>) -> Option<String> {
+    alts.retain(|a| a != gone && peers.contains_key(a));
+    (!alts.is_empty()).then(|| alts.remove(0))
 }
 
 /// Hidden temporary file name for `name`, using its hash if the name would exceed 255 bytes.

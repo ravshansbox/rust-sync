@@ -196,8 +196,7 @@ mod tests {
         line(format_args!("after delete"));
         close_file();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.ends_with(" after delete
-"));
+        assert!(text.ends_with(" after delete\n"));
         assert!(!dir.join("test.log.1").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::peers::MAX_BACKOFF;
+use crate::daemon::peers::{MAX_BACKOFF, MAX_PENDING};
 
 #[test]
 fn untrusted_nodes_are_listed_until_newer_ones_push_the_oldest_out() {

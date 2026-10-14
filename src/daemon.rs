@@ -39,9 +39,6 @@ const TICK: Duration = Duration::from_secs(30);
 const RESCAN_TICKS: u64 = 30;
 const MAX_DOWNLOADS: usize = 8;
 const MAX_UPLOADS: usize = 8;
-/// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
-/// connection attempts can't grow the list without end.
-const MAX_PENDING: usize = 20;
 
 enum Event {
     Fs(Vec<PathBuf>),

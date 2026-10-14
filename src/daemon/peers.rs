@@ -1,6 +1,6 @@
 use super::batch::{batches, config_batches};
 use super::conn::dial;
-use super::{Daemon, Event, MAX_PENDING};
+use super::{Daemon, Event};
 use crate::index::Entry;
 use crate::log::log;
 use crate::net::{self, Msg};
@@ -9,6 +9,9 @@ use tokio::sync::mpsc;
 
 /// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
 pub(super) const MAX_BACKOFF: Duration = super::TICK;
+/// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
+/// connection attempts can't grow the list without end.
+pub(super) const MAX_PENDING: usize = 20;
 
 pub(super) struct Peer {
     pub(super) conn: u64,

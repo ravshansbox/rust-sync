@@ -12,6 +12,7 @@ pub use file::{Stat, hash_file, now, stat};
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Vv(pub Vec<(u64, u64)>);
 
+/// How one version vector relates to another.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Order {
     Equal,
@@ -58,6 +59,7 @@ impl Vv {
     }
 }
 
+/// One version of a file: its content hash, attributes and version history.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FileMeta {
     /// BLAKE3 hash of the content. `None` means the file was deleted.
@@ -77,6 +79,7 @@ impl FileMeta {
     }
 }
 
+/// A file path with its metadata, as sent between nodes.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entry {
     pub path: String,
@@ -89,6 +92,7 @@ impl From<(&String, &FileMeta)> for Entry {
     }
 }
 
+/// File metadata for every known path, sorted by path.
 pub type Index = BTreeMap<String, FileMeta>;
 
 pub fn load(path: &Path) -> Index {
@@ -109,6 +113,7 @@ pub fn under<'a>(index: &'a Index, prefix: &'a str) -> impl Iterator<Item = (&'a
     own.into_iter().chain(index.range(dir.clone()..).take_while(move |(k, _)| k.starts_with(&dir)))
 }
 
+/// What to do with a remote version, as chosen by `decide`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     /// We already have this version or a newer one.

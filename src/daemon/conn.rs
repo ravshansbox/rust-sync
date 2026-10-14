@@ -52,21 +52,24 @@ pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::Unbou
 /// `quiet` hides the log line when the node cannot be reached.
 pub(super) async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
     let addr = config::with_port(&addr);
-    match timeout(DIAL_TIMEOUT, connect_any(&addr)).await {
+    let failure = match timeout(DIAL_TIMEOUT, connect_any(&addr)).await {
         Ok(Ok(s)) => {
             let ip = s.peer_addr().map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |a| a.ip().to_canonical());
             connection(s, ip, Some(id.clone()), keys, tx.clone(), port).await;
+            None
         }
-        Ok(Err(e)) if !quiet => {
+        Ok(Err(e)) => {
             let hint = if e.kind() == std::io::ErrorKind::HostUnreachable {
                 " (on macOS this can mean Local Network access is blocked for this process; see README)"
             } else {
                 ""
             };
-            log!("cannot reach {} at {addr}: {e}{hint}", net::pretty_id(&id));
+            Some(format!("{e}{hint}"))
         }
-        Err(_) if !quiet => log!("cannot reach {} at {addr}: timed out", net::pretty_id(&id)),
-        _ => {}
+        Err(_) => Some("timed out".to_string()),
+    };
+    if let Some(why) = failure.filter(|_| !quiet) {
+        log!("cannot reach {} at {addr}: {why}", net::pretty_id(&id));
     }
     let _ = tx.send(Event::DialDone { id });
 }

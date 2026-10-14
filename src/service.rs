@@ -64,6 +64,12 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     }
     std::fs::create_dir_all(log_path().parent().unwrap())?;
     write_plist(mode, &plist_xml(mode, &exe, std::env::var_os("RUST_SYNC_HOME").is_some())?)?;
+    bootstrap_with_retry(mode)?;
+    print_installed(mode, &exe);
+    Ok(())
+}
+
+fn bootstrap_with_retry(mode: Mode) -> anyhow::Result<()> {
     if bootstrap(mode).is_err() {
         // launchd sometimes refuses with "5: Input/output error", for example while a
         // job with the same label is still unloading. Clear it and try once more.
@@ -71,7 +77,6 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
         std::thread::sleep(Duration::from_secs(1));
         bootstrap(mode)?;
     }
-    print_installed(mode, &exe);
     Ok(())
 }
 

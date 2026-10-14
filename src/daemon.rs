@@ -554,6 +554,9 @@ impl Daemon {
             let Some(l) = paths::to_local(&k) else { continue };
             let root = self.local_root(&k);
             let st = index::stat(&l).filter(|_| !root.is_some_and(|r| paths::through_symlink(&l, &r)));
+            if st.is_some() && self.not_a_synced_file(&k) {
+                continue;
+            }
             self.check_stat(&k, &l, st);
         }
     }
@@ -3061,6 +3064,25 @@ mod tests {
         d.cfg.set_root(&me, &format!("{rp}/f"), true, false);
         d.check_tree(&rp);
         assert_eq!(d.index.keys().collect::<Vec<_>>(), [&format!("{rp}/g")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_changed_file_below_a_synced_file_path_is_not_recorded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("changed-below-file-root");
+        std::fs::create_dir_all(dir.join("s/f")).unwrap();
+        std::fs::write(dir.join("s/f/x"), "new").unwrap();
+        let rp = dir.join("s").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_root(&me, &format!("{rp}/f"), false, false);
+        let path = format!("{rp}/f/x");
+        let old = FileMeta { hash: Some([1; 32]), size: 9, ..meta(0, 0) };
+        d.index.insert(path.clone(), old.clone());
+        d.check_tree(&rp);
+        assert_eq!(d.index[&path], old);
+        assert!(d.outbox.iter().all(|e| e.path != path));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

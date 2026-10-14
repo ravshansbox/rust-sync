@@ -15,8 +15,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
+/// Noise protocol pattern and ciphers used for every connection.
 const PARAMS: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
+/// Largest Noise frame, the most a 2-byte length can describe.
 const MAX_FRAME: usize = 65535;
+/// Bytes the cipher's authentication tag adds to each frame.
 const TAG: usize = 16;
 /// Largest file chunk we send in one message, leaving room for the header.
 pub const CHUNK: usize = 32 * 1024;

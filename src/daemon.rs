@@ -938,11 +938,11 @@ pub fn nodes_text(
     }
     s.extend(nodes.into_iter().map(|(id, n)| {
         let state = match connected(id) {
-            Some(true) => "connected",
-            Some(false) => "offline",
+            Some(true) => "  connected",
+            Some(false) => "  offline",
             None => "",
         };
-        format!("  {}  {}  {state}\n", net::pretty_id(id), n.addr)
+        format!("  {}  {}{state}\n", net::pretty_id(id), n.addr)
     }));
     if !pending.is_empty() {
         s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");
@@ -3696,7 +3696,7 @@ mod tests {
             "  AAAAAAAA-BBBBBBBB  a:1  offline\n  CCCCCCCC  c:1  connected\n\n\
              Waiting to be trusted (run `rust-sync node add <address>` to accept):\n  EEEEEEEE  1.2.3.4:5\n"
         );
-        assert_eq!(nodes_text(&cfg, |_| None, &none), "  AAAAAAAA-BBBBBBBB  a:1  \n  CCCCCCCC  c:1  \n");
+        assert_eq!(nodes_text(&cfg, |_| None, &none), "  AAAAAAAA-BBBBBBBB  a:1\n  CCCCCCCC  c:1\n");
     }
 
     #[test]

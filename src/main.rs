@@ -419,6 +419,31 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    #[tokio::test]
+    async fn node_add_with_the_given_id_probes_the_node_and_trusts_it_at_its_address() {
+        let _key = STATE_KEY.lock().await;
+        let dir = std::env::temp_dir().join(format!("rust-sync-node-add-ok-{}", std::process::id()));
+        let keys = net::load_or_create_keys(&dir).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = async {
+            let (s, _) = listener.accept().await.unwrap();
+            let (mut r, mut w, _) = net::handshake(s, &keys, false).await.unwrap();
+            let hello = r.recv().await.unwrap();
+            w.send(&Msg::Hello { port: 1, probe: false, trusts_you: false }).await.unwrap();
+            hello
+        };
+        let a = NodeAdd { addr: addr.clone(), id: Some(net::pretty_id(&keys.id())), yes: false };
+        let (hello, result) = tokio::join!(server, node_add(a));
+        result.unwrap();
+        assert!(matches!(hello, Msg::Hello { probe: true, trusts_you: false, .. }));
+        let cfg = Config::load(&paths::config_file()).unwrap();
+        assert_eq!(cfg.trusted(&keys.id()).unwrap().addr, addr);
+        std::fs::remove_file(paths::config_file()).unwrap();
+        std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn removal_path_of_a_deleted_path_resolves_symlinks_and_dot_dot() {
         let tmp = std::env::temp_dir().join(format!("rust-sync-rm-path-{}", std::process::id()));

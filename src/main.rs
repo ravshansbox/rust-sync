@@ -375,6 +375,25 @@ mod tests {
         assert_eq!(node_add(a).await.unwrap_err().to_string(), "not a valid node ID");
     }
 
+    static STATE_KEY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    #[tokio::test]
+    async fn node_add_rejects_this_node() {
+        let _key = STATE_KEY.lock().await;
+        let keys = my_keys().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = async {
+            let (s, _) = listener.accept().await.unwrap();
+            let (mut r, _w, _) = net::handshake(s, &keys, false).await.unwrap();
+            let _ = r.recv().await;
+        };
+        let a = NodeAdd { addr, id: None, yes: true };
+        let ((), result) = tokio::join!(server, node_add(a));
+        assert_eq!(result.unwrap_err().to_string(), "that is this node");
+        std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+    }
+
     #[tokio::test]
     async fn node_add_rejects_node_with_a_different_id_than_given() {
         let dir = std::env::temp_dir().join(format!("rust-sync-node-add-{}", std::process::id()));
@@ -408,6 +427,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_without_daemon_saves_change_to_config_file() {
+        let _key = STATE_KEY.lock().await;
         send(Req::AddPath { path: "~/notes".into(), is_dir: true }).await.unwrap();
         let cfg = Config::load(&paths::config_file()).unwrap();
         assert!(cfg.active_root("~/notes").unwrap().is_dir);

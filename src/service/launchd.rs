@@ -1,4 +1,5 @@
 use super::Mode;
+use super::plist::remove_plist;
 use crate::ctl;
 use anyhow::{Context, bail};
 use std::process::Command;
@@ -35,6 +36,19 @@ pub(super) fn unload(mode: Mode) -> anyhow::Result<()> {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
+
+/// Unload every installed launcher and remove its plist, except the plist of `keep`.
+pub(super) fn unload_installed(keep: Option<Mode>) -> anyhow::Result<()> {
+    for old in [Mode::Agent, Mode::System] {
+        if old.plist().exists() {
+            unload(old)?;
+            if Some(old) != keep {
+                remove_plist(old)?;
+            }
+        }
     }
     Ok(())
 }

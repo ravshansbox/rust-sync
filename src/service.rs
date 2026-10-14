@@ -18,9 +18,9 @@ mod launchd;
 mod mode;
 mod plist;
 
-use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload};
+use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload_installed};
 use mode::{Mode, sudo_login, uid};
-use plist::{plist_xml, remove_plist, write_plist};
+use plist::{plist_xml, write_plist};
 
 const LABEL: &str = "com.github.ravshansbox.rust-sync";
 
@@ -83,19 +83,6 @@ pub fn uninstall() -> anyhow::Result<()> {
         "Uninstalled. rust-sync no longer starts at {}. Your config and synced files are unchanged.",
         mode.when()
     );
-    Ok(())
-}
-
-/// Unload every installed launcher and remove its plist, except the plist of `keep`.
-fn unload_installed(keep: Option<Mode>) -> anyhow::Result<()> {
-    for old in [Mode::Agent, Mode::System] {
-        if old.plist().exists() {
-            unload(old)?;
-            if Some(old) != keep {
-                remove_plist(old)?;
-            }
-        }
-    }
     Ok(())
 }
 

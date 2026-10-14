@@ -22,15 +22,15 @@ pub(super) struct Download {
     /// The version we asked for; incoming data must match its hash and size.
     pub(super) meta: FileMeta,
     /// The hidden temporary file beside the target, renamed into place when complete.
-    pub(super) tmp: PathBuf,
+    tmp: PathBuf,
     /// The open handle to `tmp`.
     pub(super) file: File,
     /// Hash of the bytes received so far, checked against `meta.hash` at the end.
-    pub(super) hasher: blake3::Hasher,
+    hasher: blake3::Hasher,
     /// Bytes received so far; the next chunk must start at this offset.
-    pub(super) written: u64,
+    written: u64,
     /// Other nodes that offered the same content, to fall back on if `from` goes down.
-    pub(super) alts: Vec<String>,
+    alts: Vec<String>,
 }
 
 impl Download {

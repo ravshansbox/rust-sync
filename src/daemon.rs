@@ -211,18 +211,16 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     d.dial_all();
 
     while let Some(ev) = rx.recv().await {
-        if matches!(ev, Event::Shutdown) {
+        let stop = matches!(ev, Event::Shutdown);
+        d.handle(ev);
+        if stop {
             break;
         }
-        d.handle(ev);
         d.pump_queue();
         d.flush();
     }
 
     log!("stopping");
-    for (_, dl) in d.downloads.drain() {
-        let _ = std::fs::remove_file(dl.tmp);
-    }
     d.save_index();
     let _ = std::fs::remove_file(sock);
     Ok(())
@@ -281,7 +279,10 @@ impl Daemon {
                 let resp = self.on_ctl(&req);
                 let _ = reply.send(resp);
             }
-            Event::Shutdown => {}
+            Event::Shutdown => {
+                let paths: Vec<String> = self.downloads.keys().cloned().collect();
+                paths.iter().for_each(|p| self.cancel_download(p));
+            }
         }
     }
 
@@ -1789,6 +1790,27 @@ mod tests {
         assert!(resp.ok, "{}", resp.text);
         assert!(d.downloads.is_empty());
         assert!(!dir.join("a/b").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn shutdown_removes_running_downloads_and_the_folders_they_created() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("shutdown-removes-folders");
+        std::fs::create_dir_all(&dir).unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Index(vec![Entry { path: format!("{rp}/a/b/f"), meta: r }]) });
+        assert!(dir.join("a/b/.f.rsync-tmp").is_file());
+        d.handle(Event::Shutdown);
+        assert!(d.downloads.is_empty());
+        assert!(!dir.join("a").exists());
+        assert!(dir.is_dir());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

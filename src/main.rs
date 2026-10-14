@@ -1,3 +1,5 @@
+//! Entry point: parses the command line, runs the command and writes CLI output.
+
 /// `print!` for CLI output. If stdout is closed early, as in `rust-sync node list | head -1`,
 /// exit quietly instead of panicking with "Broken pipe".
 macro_rules! out {

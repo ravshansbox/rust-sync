@@ -39,15 +39,17 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Service { cmd: ServiceCmd::Start } => service::start().await,
         Cmd::Service { cmd: ServiceCmd::Stop } => service::stop().await,
         Cmd::Service { cmd: ServiceCmd::Restart } => service::restart().await,
-        Cmd::Status => {
-            send(Req::Status).await?;
-            match service::starts_at() {
-                Some(when) => outln!("Starts at {when}: yes"),
-                None => outln!("Starts at login: no (`rust-sync service install`)"),
-            }
-            Ok(())
-        }
+        Cmd::Status => status().await,
     }
+}
+
+async fn status() -> anyhow::Result<()> {
+    send(Req::Status).await?;
+    match service::starts_at() {
+        Some(when) => outln!("Starts at {when}: yes"),
+        None => outln!("Starts at login: no (`rust-sync service install`)"),
+    }
+    Ok(())
 }
 
 fn my_keys() -> anyhow::Result<net::Keys> {

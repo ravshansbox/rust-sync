@@ -80,8 +80,7 @@ impl Daemon {
             .collect();
         for k in missing {
             let Some(l) = paths::to_local(&k) else { continue };
-            let root = self.local_root(&k);
-            let st = index::stat(&l).filter(|_| !root.is_some_and(|r| paths::through_symlink(&l, &r)));
+            let st = index::stat(&l).filter(|_| !self.through_symlink(&k, &l));
             if st.is_some() && self.not_a_synced_file(&k) {
                 continue;
             }
@@ -127,6 +126,11 @@ impl Daemon {
     /// The local path of the synced path that contains `p`.
     pub(super) fn local_root(&self, p: &str) -> Option<PathBuf> {
         self.cfg.root_of(p).and_then(paths::to_local)
+    }
+
+    /// Whether `lp` is reached through a symlink inside the synced path that contains `p`.
+    pub(super) fn through_symlink(&self, p: &str, lp: &Path) -> bool {
+        self.local_root(p).is_some_and(|r| paths::through_symlink(lp, &r))
     }
 
     /// Compare one file on disk with the index. Records and announces local changes.

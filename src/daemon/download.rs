@@ -125,7 +125,7 @@ impl Daemon {
         let _ = d.file.set_permissions(std::fs::Permissions::from_mode(d.meta.mode));
         drop(d.file);
         let Some(lp) = paths::to_local(path) else { return };
-        if self.local_root(path).is_some_and(|r| paths::through_symlink(&lp, &r)) {
+        if self.through_symlink(path, &lp) {
             let _ = std::fs::remove_file(&d.tmp);
             return;
         }

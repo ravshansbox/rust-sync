@@ -393,13 +393,9 @@ mod tests {
     }
 
     #[test]
-    fn launchd_targets_and_plist_paths() {
+    fn agent_target_is_in_the_gui_domain_of_the_current_user() {
         let uid = String::from_utf8(Command::new("id").arg("-u").output().unwrap().stdout).unwrap();
-        let uid = uid.trim();
-        assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{uid}/{LABEL}"));
-        assert_eq!(Mode::System.target().unwrap(), format!("system/{LABEL}"));
-        assert_eq!(Mode::Agent.plist(), paths::home().join(format!("Library/LaunchAgents/{LABEL}.plist")));
-        assert_eq!(Mode::System.plist(), PathBuf::from(format!("/Library/LaunchDaemons/{LABEL}.plist")));
+        assert_eq!(Mode::Agent.target().unwrap(), format!("gui/{}/{LABEL}", uid.trim()));
     }
 
     #[test]

@@ -544,7 +544,7 @@ fn remote_entry_below_a_file_root_is_skipped() {
     r.size = 3;
     r.vv = Vv(vec![(2, 1)]);
     d.on_entry("aa", Entry { path: p.clone(), meta: r });
-    let msg = Msg::Data { path: p.clone(), hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
+    let msg = Msg::Data { path: p, hash: *blake3::hash(b"abc").as_bytes(), offset: 0, bytes: b"abc".to_vec(), eof: true };
     d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
     assert!(!root.exists());
     assert!(d.index.is_empty());

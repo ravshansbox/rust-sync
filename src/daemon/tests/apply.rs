@@ -87,7 +87,7 @@ fn downloaded_conflict_winner_with_the_longest_allowed_name_keeps_the_local_copy
     let mut r = meta(1, 2);
     r.hash = Some([2; 32]);
     r.vv = Vv(vec![(2, 1)]);
-    d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp.clone()));
+    d.apply("aa", "~/s/f.txt", &lp, r.clone(), Some(tmp));
     assert_eq!(std::fs::read_to_string(&lp).unwrap(), "theirs");
     let copies: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| *p != lp).collect();
     assert_eq!(copies.len(), 1);

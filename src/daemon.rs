@@ -1725,6 +1725,26 @@ mod tests {
     }
 
     #[test]
+    fn remote_file_inside_a_folder_that_is_a_local_file_is_not_requested() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("file-blocks-folder");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a"), "local").unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Index(vec![Entry { path: format!("{rp}/a/b"), meta: r }]) });
+        assert!(a.try_recv().is_err());
+        assert!(d.downloads.is_empty());
+        assert_eq!(std::fs::read_to_string(dir.join("a")).unwrap(), "local");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn request_is_refused_outside_shared_folders_or_for_another_version() {
         let mut d = daemon();
         let me = d.me.clone();

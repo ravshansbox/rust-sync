@@ -1703,6 +1703,28 @@ mod tests {
     }
 
     #[test]
+    fn index_from_a_peer_requests_every_new_file_it_lists() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("index-msg");
+        std::fs::create_dir_all(&dir).unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let paths = [format!("{rp}/a"), format!("{rp}/b")];
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        let entries = paths.iter().map(|p| Entry { path: p.clone(), meta: r.clone() }).collect();
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Index(entries) });
+        for p in &paths {
+            assert!(matches!(a.try_recv(), Ok(Msg::Request { path, hash }) if path == *p && hash == [1; 32]));
+        }
+        assert!(a.try_recv().is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn request_is_refused_outside_shared_folders_or_for_another_version() {
         let mut d = daemon();
         let me = d.me.clone();

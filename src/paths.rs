@@ -74,10 +74,20 @@ pub fn to_local(portable: &str) -> Option<PathBuf> {
         return None;
     };
     // Never touch our own state folder.
-    if p.starts_with(state_dir()) {
+    if p.starts_with(state_dir()) || is_state_dir_in_another_spelling(&p) {
         return None;
     }
     Some(p)
+}
+
+fn is_state_dir_in_another_spelling(p: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let depth = state_dir().components().count();
+    let Some(a) = p.ancestors().find(|a| a.components().count() == depth) else { return false };
+    match (std::fs::metadata(a), std::fs::metadata(state_dir())) {
+        (Ok(a), Ok(s)) => (a.dev(), a.ino()) == (s.dev(), s.ino()),
+        _ => false,
+    }
 }
 
 /// True if `path` is `root` or inside it.
@@ -190,6 +200,14 @@ mod tests {
     fn to_local_rejects_state_folder() {
         assert_eq!(to_local(state_dir().to_str().unwrap()), None);
         assert_eq!(to_local(state_dir().join("x").to_str().unwrap()), None);
+    }
+
+    #[test]
+    fn to_local_rejects_state_folder_written_in_another_case() {
+        std::fs::create_dir_all(state_dir()).unwrap();
+        let other = state_dir().with_file_name(".RUST-SYNC");
+        assert_eq!(to_local(other.to_str().unwrap()), None);
+        assert_eq!(to_local(other.join("config.json").to_str().unwrap()), None);
     }
 
     #[test]

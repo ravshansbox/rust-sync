@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Semaphore, mpsc};
 
+/// Most files sent at once; further requests wait for a free slot.
 pub(super) const MAX_UPLOADS: usize = 8;
 
 impl Daemon {

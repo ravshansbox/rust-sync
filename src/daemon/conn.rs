@@ -16,6 +16,7 @@ const IDLE_LIMIT: Duration = Duration::from_secs(95);
 /// Happy Eyeballs (RFC 8305): start the next address after this long, without
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
+/// Give up dialling a node if no address connects within this long.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
 /// Drop a connection whose peer does not send its hello within this long.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);

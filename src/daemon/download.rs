@@ -10,6 +10,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
+/// Most files downloaded at once; further files wait in the queue.
 pub(super) const MAX_DOWNLOADS: usize = 8;
 
 pub(super) struct Download {

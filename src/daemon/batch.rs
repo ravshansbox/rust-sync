@@ -1,6 +1,7 @@
 use crate::config::Shared;
 use crate::index::Entry;
 
+/// Estimated size at which a message is full, kept below the frame limit.
 const BATCH_LIMIT: usize = 40_000;
 
 /// Split entries into messages that fit in one frame.

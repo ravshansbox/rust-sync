@@ -12,7 +12,7 @@ use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Semaphore, mpsc, oneshot};
@@ -133,11 +133,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     let keys = Arc::new(net::load_or_create_keys(dir)?);
     let config_file = paths::config_file();
     let index_file = paths::index_file();
-    let mut cfg = Config::load(&config_file)?;
-    if let Some(p) = port {
-        cfg.port = p;
-    }
-    cfg.save(&config_file)?;
+    let cfg = load_config(&config_file, port)?;
     let (tx, rx) = mpsc::unbounded_channel();
 
     let watcher = watch(tx.clone())?;
@@ -166,6 +162,15 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     d.save_index();
     let _ = std::fs::remove_file(sock);
     Ok(())
+}
+
+fn load_config(config_file: &Path, port: Option<u16>) -> anyhow::Result<Config> {
+    let mut cfg = Config::load(config_file)?;
+    if let Some(p) = port {
+        cfg.port = p;
+    }
+    cfg.save(config_file)?;
+    Ok(cfg)
 }
 
 impl Daemon {

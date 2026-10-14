@@ -31,11 +31,17 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// A message sent between nodes over an encrypted connection.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Msg {
+    /// First message each side sends: its listening port, whether this is only a probe, and whether it trusts the other side.
     Hello { port: u16, probe: bool, trusts_you: bool },
+    /// The sender's shared config of nodes and roots.
     Config(Shared),
+    /// A batch of index entries from the sender.
     Index(Vec<Entry>),
+    /// Asks for the contents of the file at `path` with this hash.
     Request { path: String, hash: [u8; 32] },
+    /// One chunk of a requested file, starting at `offset`; `eof` marks the last one.
     Data { path: String, hash: [u8; 32], offset: u64, bytes: Vec<u8>, eof: bool },
+    /// The requested file with this hash cannot be sent.
     Unavailable { path: String, hash: [u8; 32] },
     /// Keeps the connection alive, so a dead peer is noticed.
     Ping,
@@ -64,13 +70,17 @@ async fn read_frame(r: &mut (impl AsyncReadExt + Unpin)) -> std::io::Result<Vec<
 
 /// Receiving half of an encrypted connection.
 pub struct Reader {
+    /// Read half of the TCP stream.
     r: OwnedReadHalf,
+    /// Noise state, shared with the matching `Writer`.
     t: Arc<Mutex<TransportState>>,
 }
 
 /// Sending half of an encrypted connection.
 pub struct Writer {
+    /// Write half of the TCP stream.
     w: OwnedWriteHalf,
+    /// Noise state, shared with the matching `Reader`.
     t: Arc<Mutex<TransportState>>,
 }
 

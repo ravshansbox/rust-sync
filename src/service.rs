@@ -15,9 +15,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
+mod launchd;
 mod mode;
 mod plist;
 
+use launchd::{bootstrap, launchctl, loaded, unload};
 use mode::{Mode, uid};
 use plist::{plist_xml, remove_plist, write_plist};
 
@@ -180,17 +182,6 @@ async fn start_now(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn bootstrap(mode: Mode) -> anyhow::Result<()> {
-    let plist = mode.plist();
-    launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])
-}
-
-/// Whether launchd has the job loaded (whether or not it is running).
-fn loaded(mode: Mode) -> anyhow::Result<bool> {
-    let out = Command::new("launchctl").args(["print", &mode.target()?]).output().context("cannot run launchctl")?;
-    Ok(out.status.success())
-}
-
 async fn running() -> anyhow::Result<bool> {
     Ok(ctl::call(&Req::Status).await?.is_some())
 }
@@ -204,25 +195,4 @@ async fn wait_for(want: bool) -> anyhow::Result<bool> {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     Ok(false)
-}
-
-/// Unload the job and wait until the daemon has exited.
-fn unload(mode: Mode) -> anyhow::Result<()> {
-    // Fails harmlessly if the job is not loaded.
-    let _ = mode.launchctl(&["bootout", &mode.target()?]);
-    for _ in 0..50 {
-        if !ctl::socket_path()?.exists() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    Ok(())
-}
-
-fn launchctl(mode: Mode, args: &[&str]) -> anyhow::Result<()> {
-    let out = mode.launchctl(args)?;
-    if !out.status.success() {
-        bail!("launchctl {} failed: {}", args[0], String::from_utf8_lossy(&out.stderr).trim());
-    }
-    Ok(())
 }

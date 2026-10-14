@@ -363,6 +363,7 @@ mod tests {
 
     #[tokio::test]
     async fn path_remove_accepts_paths_that_no_longer_exist() {
+        let _key = STATE_KEY.lock().await;
         let remove = |p: &str| run(Cmd::Path { cmd: PathCmd::Remove { path: PathBuf::from(p) } });
         assert_eq!(remove("/no/such/path").await.unwrap_err().to_string(), "/no/such/path is not synced");
     }
@@ -441,5 +442,32 @@ mod tests {
         assert!(Config::load(&paths::config_file()).unwrap().active_root("~/notes").is_some());
         std::fs::remove_file(paths::config_file()).unwrap();
         std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_to_a_running_daemon_reports_its_reply_and_leaves_the_config_file_alone() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let _key = STATE_KEY.lock().await;
+        std::fs::create_dir_all(paths::state_dir()).unwrap();
+        let sock = ctl::socket_path().unwrap();
+        let _ = std::fs::remove_file(&sock);
+        let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+        let daemon = tokio::spawn(async move {
+            for (ok, text) in [(false, "refused"), (true, "done")] {
+                let (s, _) = listener.accept().await.unwrap();
+                let (r, mut w) = s.into_split();
+                let mut line = String::new();
+                tokio::io::BufReader::new(r).read_line(&mut line).await.unwrap();
+                assert!(matches!(serde_json::from_str(&line).unwrap(), Req::AddPath { path, is_dir: true } if path == "~/notes"));
+                let reply = serde_json::to_string(&ctl::Resp { ok, text: text.into() }).unwrap();
+                w.write_all(format!("{reply}\n").as_bytes()).await.unwrap();
+            }
+        });
+        let add = || send(Req::AddPath { path: "~/notes".into(), is_dir: true });
+        assert_eq!(add().await.unwrap_err().to_string(), "refused");
+        add().await.unwrap();
+        daemon.await.unwrap();
+        assert!(!paths::config_file().exists());
+        std::fs::remove_file(&sock).unwrap();
     }
 }

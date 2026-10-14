@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+/// Writes the plist file for the mode, using sudo for a system daemon.
 pub(super) fn write_plist(mode: Mode, xml: &str) -> anyhow::Result<()> {
     let plist = mode.plist();
     match mode {
@@ -32,6 +33,7 @@ pub(super) fn write_plist(mode: Mode, xml: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Removes the plist file for the mode, using sudo for a system daemon.
 pub(super) fn remove_plist(mode: Mode) -> anyhow::Result<()> {
     let plist = mode.plist();
     match mode {
@@ -45,6 +47,7 @@ pub(super) fn remove_plist(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Returns the name of the current user, from `id -un`.
 fn user_name() -> anyhow::Result<String> {
     let out = Command::new("id").arg("-un").output().context("cannot run id")?;
     if !out.status.success() {
@@ -53,6 +56,7 @@ fn user_name() -> anyhow::Result<String> {
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
+/// Builds the plist XML that runs the daemon with its log file and any needed environment variables.
 pub(super) fn plist_xml(mode: Mode, exe: &Path, custom_state: bool) -> anyhow::Result<String> {
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let exe = esc(&exe.to_string_lossy());

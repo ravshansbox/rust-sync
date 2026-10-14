@@ -2453,6 +2453,28 @@ mod tests {
     }
 
     #[test]
+    fn newer_remote_deletion_that_cannot_remove_the_local_file_is_not_recorded() {
+        let mut d = daemon();
+        let dir = test_dir("delete-locked");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        std::fs::write(&lp, "mine").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let mut r = meta(1, 1);
+        r.hash = None;
+        r.vv = Vv(vec![(1, 2)]);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        d.apply("aa", "~/s/f.txt", &lp, r, None);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "mine");
+        assert_eq!(d.index["~/s/f.txt"], local);
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn download_that_cannot_be_moved_into_place_is_dropped_and_not_recorded() {
         let mut d = daemon();
         let dir = test_dir("unwritable");

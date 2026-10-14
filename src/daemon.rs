@@ -436,11 +436,18 @@ impl Daemon {
             self.queued.remove(&p);
         }
         self.reconcile_watches();
-        for (root, _) in self.active_roots().difference(before) {
+        let after = self.active_roots();
+        for (root, _) in after.difference(before) {
             log!("now syncing {root}");
             self.check_tree(root);
             // Peers may not have seen our entries for this root yet.
             self.outbox.extend(index::under(&self.index, root).map(Entry::from));
+        }
+        for (root, _) in before.difference(&after) {
+            if self.cfg.active_root(root).is_none() && self.cfg.root_of(root).is_some() {
+                self.check_tree(root);
+                self.outbox.extend(index::under(&self.index, root).map(Entry::from));
+            }
         }
         for shared in config_batches(&self.cfg.shared) {
             self.broadcast(&Msg::Config(shared));
@@ -1980,6 +1987,27 @@ mod tests {
         assert!(resp.ok, "{}", resp.text);
         let f = dir.join("x/f").to_str().unwrap().to_string();
         assert!(d.index.get(&f).is_some_and(|m| !m.deleted()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn files_in_a_folder_are_recorded_and_sent_when_a_synced_file_path_inside_a_synced_folder_is_removed() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("nested-file-root-removed");
+        std::fs::create_dir_all(dir.join("s/f")).unwrap();
+        std::fs::write(dir.join("s/f/x"), "x").unwrap();
+        d.config_file = dir.join("config.json");
+        let s = dir.join("s").to_str().unwrap().to_string();
+        let f = dir.join("s/f").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &s, true, false);
+        d.cfg.set_root(&me, &f, false, false);
+        d.check_tree(&s);
+        assert!(d.index.is_empty());
+        assert!(d.on_ctl(&Req::RemovePath { path: f.clone() }).ok);
+        let x = format!("{f}/x");
+        assert!(d.index.get(&x).is_some_and(|m| !m.deleted()));
+        assert!(d.outbox.iter().any(|e| e.path == x));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

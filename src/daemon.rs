@@ -13,7 +13,7 @@ use notify::{RecommendedWatcher, RecursiveMode};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, UnixListener};
@@ -28,10 +28,11 @@ mod remote;
 mod scan;
 mod tasks;
 mod text;
+mod upload;
 
 use batch::batches;
 use conn::accept_loop;
-use tasks::{ctl_loop, debounce, upload};
+use tasks::{ctl_loop, debounce};
 pub use text::{nodes_text, paths_text, status_text};
 
 const TICK: Duration = Duration::from_secs(30);
@@ -303,17 +304,6 @@ impl Daemon {
         match index::save(&self.index, &self.index_file) {
             Ok(()) => self.index_dirty = false,
             Err(e) => log!("cannot save index: {e}"),
-        }
-    }
-
-    fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
-        let Some(peer) = self.peers.get(from) else { return };
-        let root = self.local_root(&path);
-        let ok = root.is_some() && !self.not_a_synced_file(&path) && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
-        let safe = |lp: &Path| index::stat(lp).is_some() && !root.as_ref().is_some_and(|r| paths::through_symlink(lp, r));
-        match paths::to_local(&path) {
-            Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, root, path, hash, peer.data.clone(), self.uploads.clone()))),
-            _ => drop(peer.ctl.send(Msg::Unavailable { path, hash })),
         }
     }
 }

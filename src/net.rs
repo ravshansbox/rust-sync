@@ -45,6 +45,7 @@ mod keys;
 
 pub use keys::{Keys, hex, load_or_create_keys, parse_id, pretty_id, short_id};
 
+/// Write one frame: a 2-byte big-endian length, then the bytes.
 async fn write_frame(w: &mut (impl AsyncWriteExt + Unpin), buf: &[u8]) -> std::io::Result<()> {
     let mut out = Vec::with_capacity(buf.len() + 2);
     out.extend_from_slice(&(buf.len() as u16).to_be_bytes());
@@ -52,6 +53,7 @@ async fn write_frame(w: &mut (impl AsyncWriteExt + Unpin), buf: &[u8]) -> std::i
     w.write_all(&out).await
 }
 
+/// Read one frame written by `write_frame` and return its bytes.
 async fn read_frame(r: &mut (impl AsyncReadExt + Unpin)) -> std::io::Result<Vec<u8>> {
     let mut len = [0u8; 2];
     r.read_exact(&mut len).await?;
@@ -73,6 +75,7 @@ pub struct Writer {
 }
 
 impl Reader {
+    /// Read the next frame, decrypt it and decode the message.
     pub async fn recv(&mut self) -> anyhow::Result<Msg> {
         let frame = read_frame(&mut self.r).await?;
         let mut plain = vec![0u8; frame.len()];
@@ -82,6 +85,7 @@ impl Reader {
 }
 
 impl Writer {
+    /// Encode the message, encrypt it and write it as one frame. Fails if it is larger than `MAX_MSG`.
     pub async fn send(&mut self, msg: &Msg) -> anyhow::Result<()> {
         let plain = postcard::to_stdvec(msg)?;
         if plain.len() > MAX_MSG {
@@ -104,6 +108,7 @@ pub async fn handshake(
         .context("handshake timed out")?
 }
 
+/// Run the three XX handshake steps without a time limit, then split the stream.
 async fn handshake_inner(
     mut stream: TcpStream,
     keys: &Keys,

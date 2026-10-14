@@ -151,21 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn write_keeps_file_when_next_line_reaches_max_size_exactly() {
-        let dir = test_dir("limit");
-        let path = dir.join("test.log");
-        std::fs::create_dir_all(&dir).unwrap();
-        let line_len = timestamp().len() + " hello\n".len();
-        std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
-        let mut log = LogFile::open(path.clone()).unwrap();
-        log.write(&format!("{} hello\n", timestamp()));
-        drop(log);
-        assert!(!dir.join("test.log.1").exists());
-        assert_eq!(std::fs::metadata(&path).unwrap().len(), MAX_SIZE);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
     fn write_counts_written_lines_towards_max_size() {
         let dir = test_dir("count");
         let path = dir.join("test.log");

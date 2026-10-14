@@ -2,7 +2,8 @@ use super::{Event, TICK};
 use crate::ctl::Resp;
 use notify::RecommendedWatcher;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -47,6 +48,14 @@ pub(super) fn watch(tx: mpsc::UnboundedSender<Event>) -> notify::Result<Recommen
     })?;
     tokio::spawn(debounce(fs_rx, tx));
     Ok(watcher)
+}
+
+/// Bind the control socket, replacing any stale one, readable only by this user.
+pub(super) fn ctl_listen(sock: &Path) -> std::io::Result<UnixListener> {
+    let _ = std::fs::remove_file(sock);
+    let l = UnixListener::bind(sock)?;
+    std::fs::set_permissions(sock, std::fs::Permissions::from_mode(0o600))?;
+    Ok(l)
 }
 
 /// Answer CLI requests, one JSON line per connection.

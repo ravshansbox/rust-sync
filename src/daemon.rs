@@ -12,11 +12,9 @@ use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fs::File;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::UnixListener;
 use tokio::sync::{Semaphore, mpsc, oneshot};
 
 mod batch;
@@ -32,7 +30,7 @@ mod upload;
 
 use batch::batches;
 use conn::{accept_loop, bind};
-use tasks::{ctl_loop, shutdown_on_signal, tick_loop, watch};
+use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 
 const TICK: Duration = Duration::from_secs(30);
@@ -142,10 +140,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     tokio::spawn(accept_loop(listener, keys.clone(), tx.clone(), cfg.port));
 
     let sock = ctl::socket_path()?;
-    let _ = std::fs::remove_file(&sock);
-    let ctl_listener = UnixListener::bind(&sock)?;
-    std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600))?;
-    tokio::spawn(ctl_loop(ctl_listener, tx.clone()));
+    tokio::spawn(ctl_loop(ctl_listen(&sock)?, tx.clone()));
 
     tokio::spawn(tick_loop(tx.clone()));
     tokio::spawn(shutdown_on_signal(tx.clone()));

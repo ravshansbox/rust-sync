@@ -3,10 +3,11 @@ use super::remote::conflict_name;
 use super::conn::{connect_any, connection_inner, dial};
 use super::peers::MAX_BACKOFF;
 use super::upload::upload;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use crate::index::{Action, Vv};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, UnixListener};
 use tokio::time::timeout;
 
 fn meta(mtime: i64, by: u64) -> FileMeta {

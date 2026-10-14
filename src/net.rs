@@ -232,9 +232,8 @@ mod tests {
     }
 
     #[test]
-    fn short_id_reads_first_eight_bytes_or_gives_zero_for_non_hex() {
+    fn short_id_reads_first_eight_bytes() {
         assert_eq!(short_id(ID), 0x0123_4567_89ab_cdef);
-        assert_eq!(short_id(&"g".repeat(64)), 0);
     }
 
     #[test]

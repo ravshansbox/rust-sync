@@ -31,10 +31,10 @@ pub fn resolve_parent(dir: PathBuf) -> PathBuf {
     for base in dir.ancestors().skip(1) {
         let Ok(mut p) = base.canonicalize() else { continue };
         for part in dir.strip_prefix(base).unwrap_or(&dir).components() {
-            match part {
-                std::path::Component::ParentDir => drop(p.pop()),
-                std::path::Component::CurDir => {}
-                _ => p.push(part),
+            if part == std::path::Component::ParentDir {
+                p.pop();
+            } else {
+                p.push(part);
             }
         }
         return p;

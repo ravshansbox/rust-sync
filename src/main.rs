@@ -38,6 +38,7 @@ async fn main() {
     }
 }
 
+/// Write to stdout and flush; exit quietly on a broken pipe, or with an error on any other failure.
 fn write_stdout(args: std::fmt::Arguments) {
     let mut stdout = std::io::stdout().lock();
     if let Err(e) = stdout.write_fmt(args).and_then(|()| stdout.flush()) {

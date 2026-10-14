@@ -69,6 +69,7 @@ pub(super) fn sudo_login() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Return the user ID that owns the home directory.
 pub(super) fn uid() -> anyhow::Result<u32> {
     Ok(std::fs::metadata(paths::home())?.uid())
 }

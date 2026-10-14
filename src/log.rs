@@ -32,6 +32,7 @@ pub fn to_file(path: PathBuf) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Write one timestamped log line to the log file, or to stderr if none is set.
 pub fn line(msg: std::fmt::Arguments) {
     let text = format!("{} {msg}\n", timestamp());
     let mut file = FILE.lock().unwrap_or_else(PoisonError::into_inner);

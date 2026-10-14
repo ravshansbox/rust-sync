@@ -71,6 +71,7 @@ pub(super) async fn ctl_loop(l: UnixListener, tx: mpsc::UnboundedSender<Event>) 
     }
 }
 
+/// Read one request from `s`, pass it to the daemon and write back its reply.
 async fn ctl_conn(s: UnixStream, tx: mpsc::UnboundedSender<Event>) -> anyhow::Result<()> {
     let (r, mut w) = s.into_split();
     let mut line = String::new();

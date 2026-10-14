@@ -48,6 +48,7 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Parse a node ID given on the command line.
 pub(super) fn node_id(s: &str) -> anyhow::Result<String> {
     net::parse_id(s).context("not a valid node ID")
 }

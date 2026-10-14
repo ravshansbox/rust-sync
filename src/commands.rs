@@ -144,19 +144,22 @@ mod tests {
 
     static STATE_KEY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-    #[tokio::test]
-    async fn node_add_rejects_this_node() {
-        let _key = STATE_KEY.lock().await;
-        let keys = my_keys().unwrap();
+    async fn node_add_to_silent_node(keys: &net::Keys, id: Option<String>, yes: bool) -> anyhow::Result<()> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap().to_string();
         let server = async {
             let (s, _) = listener.accept().await.unwrap();
-            let (mut r, _w, _) = net::handshake(s, &keys, false).await.unwrap();
+            let (mut r, _w, _) = net::handshake(s, keys, false).await.unwrap();
             let _ = r.recv().await;
         };
-        let a = NodeAdd { addr, id: None, yes: true };
-        let ((), result) = tokio::join!(server, node_add(a));
+        let ((), result) = tokio::join!(server, node_add(NodeAdd { addr, id, yes }));
+        result
+    }
+
+    #[tokio::test]
+    async fn node_add_rejects_this_node() {
+        let _key = STATE_KEY.lock().await;
+        let result = node_add_to_silent_node(&my_keys().unwrap(), None, true).await;
         assert_eq!(result.unwrap_err().to_string(), "that is this node");
         std::fs::remove_file(paths::state_dir().join("key")).unwrap();
     }
@@ -165,16 +168,8 @@ mod tests {
     async fn node_add_rejects_node_with_a_different_id_than_given() {
         let dir = std::env::temp_dir().join(format!("rust-sync-node-add-{}", std::process::id()));
         let keys = net::load_or_create_keys(&dir).unwrap();
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap().to_string();
-        let server = async {
-            let (s, _) = listener.accept().await.unwrap();
-            let (mut r, _w, _) = net::handshake(s, &keys, false).await.unwrap();
-            let _ = r.recv().await;
-        };
         let expected = "ab".repeat(32);
-        let a = NodeAdd { addr, id: Some(expected.clone()), yes: false };
-        let ((), result) = tokio::join!(server, node_add(a));
+        let result = node_add_to_silent_node(&keys, Some(expected.clone()), false).await;
         let want = format!("that is not the ID you gave ({}). Node not added.", net::pretty_id(&expected));
         assert_eq!(result.unwrap_err().to_string(), want);
         std::fs::remove_dir_all(&dir).unwrap();

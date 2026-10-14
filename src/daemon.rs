@@ -421,19 +421,12 @@ impl Daemon {
         let unwanted: Vec<String> = self
             .downloads
             .keys()
+            .chain(self.queued.keys())
             .filter(|p| !self.is_synced(p))
             .cloned()
             .collect();
         for p in unwanted {
             self.cancel_download(&p);
-        }
-        let unwanted: Vec<String> = self
-            .queued
-            .keys()
-            .filter(|p| !self.is_synced(p))
-            .cloned()
-            .collect();
-        for p in unwanted {
             self.queued.remove(&p);
         }
         self.reconcile_watches();

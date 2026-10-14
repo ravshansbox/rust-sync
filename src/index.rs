@@ -74,6 +74,7 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
+    /// Whether this version records a deletion.
     pub const fn deleted(&self) -> bool {
         self.hash.is_none()
     }
@@ -95,6 +96,7 @@ impl From<(&String, &FileMeta)> for Entry {
 /// File metadata for every known path, sorted by path.
 pub type Index = BTreeMap<String, FileMeta>;
 
+/// Reads the index from `path`. Returns an empty index if the file is missing or unreadable.
 pub fn load(path: &Path) -> Index {
     std::fs::read(path)
         .ok()
@@ -102,6 +104,7 @@ pub fn load(path: &Path) -> Index {
         .unwrap_or_default()
 }
 
+/// Writes the index to `path` atomically.
 pub fn save(index: &Index, path: &Path) -> anyhow::Result<()> {
     Ok(crate::paths::write_atomic(path, &postcard::to_stdvec(index)?)?)
 }
@@ -128,6 +131,7 @@ pub enum Action {
     Same,
 }
 
+/// Chooses what to do with a remote version, given our version of the same path, if any.
 pub fn decide(local: Option<&FileMeta>, remote: &FileMeta) -> Action {
     let Some(l) = local else { return Action::Take };
     match l.vv.compare(&remote.vv) {

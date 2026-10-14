@@ -29,6 +29,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// Give up after this many checks (5 seconds).
 const POLL_TRIES: u32 = 50;
 
+/// Where the installed daemon writes its log.
 fn log_path() -> PathBuf {
     paths::home().join("Library/Logs/rust-sync.log")
 }
@@ -38,6 +39,7 @@ pub fn starts_at() -> Option<&'static str> {
     Mode::installed().map(Mode::when)
 }
 
+/// Install the launcher (agent, or system daemon with `system`) and start the daemon.
 pub async fn install(system: bool) -> anyhow::Result<()> {
     let mode = if system { Mode::System } else { Mode::Agent };
     if mode == Mode::System && uid()? == 0 {
@@ -61,6 +63,7 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Tell the user where the launcher, log and binary are, and warn if the binary is in a Cargo build folder.
 fn print_installed(mode: Mode, exe: &Path) {
     outln!("Installed. rust-sync now starts at {}, and it is running now.", mode.when());
     outln!("  Launcher: {}", mode.plist().display());
@@ -75,6 +78,7 @@ fn print_installed(mode: Mode, exe: &Path) {
     }
 }
 
+/// Remove the launcher and stop the daemon. Config and synced files are kept.
 pub fn uninstall() -> anyhow::Result<()> {
     let Some(mode) = Mode::installed() else {
         outln!("Not installed.");
@@ -126,6 +130,7 @@ pub async fn restart() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Return the installed mode, or fail if not installed. Ask for `sudo` first for a system daemon.
 fn installed_or_bail() -> anyhow::Result<Mode> {
     let Some(mode) = Mode::installed() else { bail!("not installed. Run `rust-sync service install` first.") };
     if mode == Mode::System {
@@ -146,6 +151,7 @@ async fn stop_now(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Start the daemon through launchd and wait until it answers.
 async fn start_now(mode: Mode) -> anyhow::Result<()> {
     if loaded(mode)? {
         kickstart(mode)?;
@@ -159,6 +165,7 @@ async fn start_now(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Whether a daemon answers on the control socket.
 async fn running() -> anyhow::Result<bool> {
     Ok(ctl::call(&Req::Status).await?.is_some())
 }

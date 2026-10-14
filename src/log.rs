@@ -76,10 +76,7 @@ pub(crate) use log;
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn test_dir(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("rust-sync-log-{name}-test-{}", std::process::id()))
-    }
+    use crate::paths::test_dir;
 
     fn close_file() {
         *FILE.lock().unwrap_or_else(PoisonError::into_inner) = None;
@@ -87,7 +84,7 @@ mod tests {
 
     #[test]
     fn write_rotates_file_when_next_line_would_exceed_max_size_replacing_an_older_rotated_file() {
-        let dir = test_dir("line");
+        let dir = test_dir("log-line");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("test.log.1"), "older").unwrap();
@@ -105,7 +102,7 @@ mod tests {
 
     #[test]
     fn write_counts_written_lines_towards_max_size() {
-        let dir = test_dir("count");
+        let dir = test_dir("log-count");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         let line_len = timestamp().len() + " hello\n".len();
@@ -121,7 +118,7 @@ mod tests {
 
     #[test]
     fn line_longer_than_max_size_does_not_rotate_an_empty_file_over_the_older_one() {
-        let dir = test_dir("long");
+        let dir = test_dir("log-long");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("test.log.1"), "older").unwrap();
@@ -135,7 +132,7 @@ mod tests {
 
     #[test]
     fn write_starts_a_new_file_at_max_size_when_the_log_file_was_deleted() {
-        let dir = test_dir("deleted");
+        let dir = test_dir("log-deleted");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
@@ -151,7 +148,7 @@ mod tests {
 
     #[test]
     fn to_file_creates_missing_folder_and_appends_across_reopens() {
-        let dir = test_dir("to-file");
+        let dir = test_dir("log-to-file");
         let path = dir.join("nested/test.log");
         to_file(path.clone()).unwrap();
         line(format_args!("first"));

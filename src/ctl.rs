@@ -187,7 +187,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_at_returns_reply_or_none_when_daemon_is_absent_or_closes() {
-        let sock = std::env::temp_dir().join(format!("rust-sync-call-{}.sock", std::process::id()));
+        let sock = test_dir("call").with_extension("sock");
         let _ = std::fs::remove_file(&sock);
         assert!(call_at(&sock, &Req::Status).await.unwrap().is_none());
 

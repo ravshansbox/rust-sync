@@ -4,7 +4,7 @@ use tokio::net::UnixListener;
 
 #[tokio::test]
 async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
-    let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
+    let sock = test_dir("ctl").with_extension("sock");
     let _ = std::fs::remove_file(&sock);
     let (tx, mut rx) = mpsc::unbounded_channel();
     let task = tokio::spawn(ctl_loop(UnixListener::bind(&sock).unwrap(), tx));
@@ -22,7 +22,7 @@ async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
 
 #[tokio::test]
 async fn ctl_loop_rejects_a_request_it_cannot_read_instead_of_closing() {
-    let sock = std::env::temp_dir().join(format!("rust-sync-ctl-bad-{}.sock", std::process::id()));
+    let sock = test_dir("ctl-bad").with_extension("sock");
     let _ = std::fs::remove_file(&sock);
     let (tx, _rx) = mpsc::unbounded_channel();
     let task = tokio::spawn(ctl_loop(UnixListener::bind(&sock).unwrap(), tx));

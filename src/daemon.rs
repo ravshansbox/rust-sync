@@ -2087,6 +2087,36 @@ mod tests {
     }
 
     #[test]
+    fn download_whose_temp_file_cannot_be_written_is_dropped_without_touching_the_local_file() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        up(&mut d, "aa", 1);
+        let dir = test_dir("unwritable-download");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f");
+        let p = lp.to_str().unwrap().to_string();
+        let mut r = meta(0, 2);
+        r.hash = Some(*blake3::hash(b"abc").as_bytes());
+        r.size = 3;
+        r.vv = Vv(vec![(2, 1)]);
+        let tmp = dir.join(".f.rsync-tmp");
+        let mut dl = download("aa", r.clone(), &tmp);
+        dl.file = File::open(&tmp).unwrap();
+        d.downloads.insert(p.clone(), dl);
+        let hash = r.hash.unwrap();
+        let data = |bytes: &[u8], offset, eof| Msg::Data { path: p.clone(), hash, offset, bytes: bytes.to_vec(), eof };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(b"abc", 0, false) });
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: data(b"", 3, true) });
+        assert!(!lp.exists());
+        assert!(!tmp.exists());
+        assert!(d.downloads.is_empty());
+        assert!(!d.index.contains_key(&p));
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn completed_download_with_mtime_before_1970_is_written_with_the_epoch() {
         let mut d = daemon();
         let me = d.me.clone();

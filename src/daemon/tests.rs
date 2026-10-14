@@ -32,28 +32,13 @@ fn up(d: &mut Daemon, id: &str, conn: u64) -> mpsc::UnboundedReceiver<Msg> {
 
 fn daemon() -> Daemon {
     let keys = Arc::new(Keys { private: vec![0; 32], public: vec![1; 32] });
-    let me = keys.id();
-    Daemon {
-        me_short: net::short_id(&me),
-        me,
+    Daemon::new(
         keys,
-        cfg: Config::default(),
-        config_file: test_dir("no-state").join("config.json"),
-        index: Index::new(),
-        index_file: test_dir("no-state").join("index.bin"),
-        peers: HashMap::new(),
-        dialling: HashSet::new(),
-        backoff: HashMap::new(),
-        pending: BTreeMap::new(),
-        pending_order: VecDeque::new(),
-        downloads: HashMap::new(),
-        queued: BTreeMap::new(),
-        uploads: Arc::new(Semaphore::new(MAX_UPLOADS)),
-        watcher: notify::recommended_watcher(|_: notify::Result<notify::Event>| {}).unwrap(),
-        watched: HashMap::new(),
-        tx: mpsc::unbounded_channel().0,
-        outbox: Vec::new(),
-        index_dirty: false,
-        ticks: 0,
-    }
+        Config::default(),
+        test_dir("no-state").join("config.json"),
+        Index::new(),
+        test_dir("no-state").join("index.bin"),
+        notify::recommended_watcher(|_: notify::Result<notify::Event>| {}).unwrap(),
+        mpsc::unbounded_channel().0,
+    )
 }

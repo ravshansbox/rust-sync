@@ -151,30 +151,8 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     tokio::spawn(tick_loop(tx.clone()));
     tokio::spawn(shutdown_on_signal(tx.clone()));
 
-    let me = keys.id();
-    let mut d = Daemon {
-        me_short: net::short_id(&me),
-        me,
-        keys,
-        cfg,
-        config_file,
-        index: index::load(&index_file),
-        index_file,
-        peers: HashMap::new(),
-        dialling: HashSet::new(),
-        backoff: HashMap::new(),
-        pending: BTreeMap::new(),
-        pending_order: VecDeque::new(),
-        downloads: HashMap::new(),
-        queued: BTreeMap::new(),
-        uploads: Arc::new(Semaphore::new(MAX_UPLOADS)),
-        watcher,
-        watched: HashMap::new(),
-        tx,
-        outbox: Vec::new(),
-        index_dirty: false,
-        ticks: 0,
-    };
+    let index = index::load(&index_file);
+    let mut d = Daemon::new(keys, cfg, config_file, index, index_file, watcher, tx);
     log!("rust-sync node {}", net::pretty_id(&d.me));
     log!("listening on port {}", d.cfg.port);
     d.reconcile_watches();
@@ -199,6 +177,41 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
 }
 
 impl Daemon {
+    fn new(
+        keys: Arc<Keys>,
+        cfg: Config,
+        config_file: PathBuf,
+        index: Index,
+        index_file: PathBuf,
+        watcher: RecommendedWatcher,
+        tx: mpsc::UnboundedSender<Event>,
+    ) -> Self {
+        let me = keys.id();
+        Daemon {
+            me_short: net::short_id(&me),
+            me,
+            keys,
+            cfg,
+            config_file,
+            index,
+            index_file,
+            peers: HashMap::new(),
+            dialling: HashSet::new(),
+            backoff: HashMap::new(),
+            pending: BTreeMap::new(),
+            pending_order: VecDeque::new(),
+            downloads: HashMap::new(),
+            queued: BTreeMap::new(),
+            uploads: Arc::new(Semaphore::new(MAX_UPLOADS)),
+            watcher,
+            watched: HashMap::new(),
+            tx,
+            outbox: Vec::new(),
+            index_dirty: false,
+            ticks: 0,
+        }
+    }
+
     fn handle(&mut self, ev: Event) {
         match ev {
             Event::Fs(paths) => paths.iter().for_each(|p| self.on_fs(p)),

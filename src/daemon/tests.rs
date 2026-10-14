@@ -21,7 +21,7 @@ fn meta(mtime: i64, by: u64) -> FileMeta {
 
 fn download(from: &str, meta: FileMeta, tmp: &Path) -> Download {
     let file = File::create(tmp).unwrap();
-    Download { from: from.into(), meta, tmp: tmp.to_path_buf(), file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
+    Download::new(from, meta, tmp.to_path_buf(), file)
 }
 
 fn up(d: &mut Daemon, id: &str, conn: u64) -> mpsc::UnboundedReceiver<Msg> {

@@ -77,6 +77,12 @@ struct Download {
     alts: Vec<String>,
 }
 
+impl Download {
+    fn new(from: &str, meta: FileMeta, tmp: PathBuf, file: File) -> Self {
+        Download { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
+    }
+}
+
 struct Daemon {
     me: String,
     me_short: u64,

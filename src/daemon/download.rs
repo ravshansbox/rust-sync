@@ -42,8 +42,7 @@ impl Daemon {
             Err(e) => return log!("cannot create {}: {e}", tmp.display()),
         };
         let _ = peer.ctl.send(Msg::Request { path: p.to_string(), hash: r.hash.unwrap() });
-        let d = Download { from: from.to_string(), meta: r, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() };
-        self.downloads.insert(p.to_string(), d);
+        self.downloads.insert(p.to_string(), Download::new(from, r, tmp, file));
     }
 
     pub(super) fn pump_queue(&mut self) {

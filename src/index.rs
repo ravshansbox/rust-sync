@@ -15,21 +15,28 @@ pub struct Vv(pub Vec<(u64, u64)>);
 /// How one version vector relates to another.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Order {
+    /// Both have seen exactly the same changes.
     Equal,
+    /// `self` has seen every change in `other`, and more.
     Newer,
+    /// `other` has seen every change in `self`, and more.
     Older,
+    /// Each has seen changes the other has not.
     Concurrent,
 }
 
 impl Vv {
+    /// How many changes `node` has made, or 0 if it is not listed.
     fn get(&self, node: u64) -> u64 {
         self.0.iter().find(|(n, _)| *n == node).map_or(0, |(_, c)| *c)
     }
 
+    /// A copy with the count for `node` increased by one.
     pub fn bumped(&self, node: u64) -> Self {
         self.merged(&Self(vec![(node, self.get(node) + 1)]))
     }
 
+    /// A copy that takes the higher count for each node in `self` and `other`.
     pub fn merged(&self, other: &Self) -> Self {
         let mut v = self.clone();
         for &(n, c) in &other.0 {
@@ -64,10 +71,13 @@ impl Vv {
 pub struct FileMeta {
     /// BLAKE3 hash of the content. `None` means the file was deleted.
     pub hash: Option<[u8; 32]>,
+    /// Size of the content in bytes.
     pub size: u64,
     /// Modification time, nanoseconds since the Unix epoch.
     pub mtime: i64,
+    /// Unix permission bits (`0o777` mask).
     pub mode: u32,
+    /// Version history of this path.
     pub vv: Vv,
     /// Short ID of the node that made this version.
     pub by: u64,
@@ -83,7 +93,9 @@ impl FileMeta {
 /// A file path with its metadata, as sent between nodes.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entry {
+    /// Portable path (`~/...` under home, otherwise absolute).
     pub path: String,
+    /// The version of the file at `path`.
     pub meta: FileMeta,
 }
 

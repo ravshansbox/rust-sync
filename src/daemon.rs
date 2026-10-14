@@ -3241,6 +3241,16 @@ mod tests {
     }
 
     #[test]
+    fn conflict_name_of_a_longest_allowed_name_is_shortened_at_a_character_boundary() {
+        let loser = meta(1_700_000_000_123_456_789, 0xdead_beef_0000_0001);
+        let tag = "sync-conflict-1700000000-deadbeef";
+        let long_stem = Path::new("/d").join(format!("{}.md", "é".repeat(126)));
+        assert_eq!(conflict_name(&long_stem, &loser), Path::new("/d").join(format!("{}.{tag}.md", "é".repeat(109))));
+        let long_ext = Path::new("/d").join(format!("a.{}", "x".repeat(253)));
+        assert_eq!(conflict_name(&long_ext, &loser), Path::new("/d").join(format!("a.{}.{tag}", "x".repeat(219))));
+    }
+
+    #[test]
     fn batches_keeps_order_and_skips_empty() {
         assert!(batches(Vec::new()).is_empty());
         let entries: Vec<_> = (0..1000).map(|i| entry(format!("~/{i}"), 1)).collect();

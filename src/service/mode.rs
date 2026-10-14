@@ -12,6 +12,10 @@ pub(super) enum Mode {
 }
 
 impl Mode {
+    pub(super) fn installed() -> Option<Self> {
+        [Self::System, Self::Agent].into_iter().find(|m| m.plist().exists())
+    }
+
     pub(super) fn plist(self) -> PathBuf {
         match self {
             Self::Agent => paths::home().join("Library/LaunchAgents").join(format!("{LABEL}.plist")),

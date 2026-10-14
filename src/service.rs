@@ -29,13 +29,9 @@ fn log_path() -> PathBuf {
     paths::home().join("Library/Logs/rust-sync.log")
 }
 
-fn installed_mode() -> Option<Mode> {
-    [Mode::System, Mode::Agent].into_iter().find(|m| m.plist().exists())
-}
-
 /// When the daemon starts by itself ("login" or "boot"), or `None` if it is not installed.
 pub fn starts_at() -> Option<&'static str> {
-    installed_mode().map(Mode::when)
+    Mode::installed().map(Mode::when)
 }
 
 /// Ask for the password once, so later `sudo` calls do not prompt with their output hidden.
@@ -84,7 +80,7 @@ fn print_installed(mode: Mode, exe: &Path) {
 }
 
 pub fn uninstall() -> anyhow::Result<()> {
-    let Some(mode) = installed_mode() else {
+    let Some(mode) = Mode::installed() else {
         outln!("Not installed.");
         return Ok(());
     };
@@ -148,7 +144,7 @@ pub async fn restart() -> anyhow::Result<()> {
 }
 
 fn installed_or_bail() -> anyhow::Result<Mode> {
-    let Some(mode) = installed_mode() else { bail!("not installed. Run `rust-sync service install` first.") };
+    let Some(mode) = Mode::installed() else { bail!("not installed. Run `rust-sync service install` first.") };
     if mode == Mode::System {
         sudo_login()?;
     }

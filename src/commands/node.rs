@@ -17,20 +17,7 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     let addr = config::with_port(&a.addr);
     let expected = a.id.as_deref().map(node_id).transpose()?;
 
-    outln!("Connecting to {addr}...");
-    let stream = timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(&addr))
-        .await
-        .context("timed out")?
-        .with_context(|| format!("cannot connect to {addr}. Is `rust-sync daemon` running there?"))?;
-    let (mut r, mut w, id) = net::handshake(stream, &keys, true).await?;
-    if id == keys.id() {
-        bail!("that is this node");
-    }
-    w.send(&Msg::Hello { port: cfg.port, probe: true, trusts_you: cfg.trusted(&id).is_some() }).await?;
-    let trusts_us = matches!(
-        timeout(Duration::from_secs(10), r.recv()).await,
-        Ok(Ok(Msg::Hello { trusts_you: true, .. }))
-    );
+    let (id, trusts_us) = probe(&addr, &keys, &cfg).await?;
 
     outln!("Node ID: {}", net::pretty_id(&id));
     match expected {
@@ -56,4 +43,23 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+/// Connect to the node at addr and return its ID and whether it trusts this node.
+async fn probe(addr: &str, keys: &net::Keys, cfg: &Config) -> anyhow::Result<(String, bool)> {
+    outln!("Connecting to {addr}...");
+    let stream = timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(addr))
+        .await
+        .context("timed out")?
+        .with_context(|| format!("cannot connect to {addr}. Is `rust-sync daemon` running there?"))?;
+    let (mut r, mut w, id) = net::handshake(stream, keys, true).await?;
+    if id == keys.id() {
+        bail!("that is this node");
+    }
+    w.send(&Msg::Hello { port: cfg.port, probe: true, trusts_you: cfg.trusted(&id).is_some() }).await?;
+    let trusts_us = matches!(
+        timeout(Duration::from_secs(10), r.recv()).await,
+        Ok(Ok(Msg::Hello { trusts_you: true, .. }))
+    );
+    Ok((id, trusts_us))
 }

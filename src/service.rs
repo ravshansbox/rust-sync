@@ -22,6 +22,7 @@ use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload_i
 use mode::{Mode, sudo_login, uid};
 use plist::{plist_xml, write_plist};
 
+/// Name the launchd job, its plist file and its service target with this label.
 const LABEL: &str = "com.github.ravshansbox.rust-sync";
 /// Check this often while waiting for the daemon to start or stop.
 const POLL_INTERVAL: Duration = Duration::from_millis(100);

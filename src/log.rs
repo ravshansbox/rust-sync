@@ -10,6 +10,7 @@ use std::sync::{Mutex, PoisonError};
 mod time;
 use time::timestamp;
 
+/// Rotate the log file once a write would take it past this many bytes.
 const MAX_SIZE: u64 = 1024 * 1024;
 
 struct LogFile {

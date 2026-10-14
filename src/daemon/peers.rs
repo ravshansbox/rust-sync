@@ -53,8 +53,12 @@ impl Daemon {
         ok
     }
 
+    pub(super) fn is_current(&self, id: &str, conn: u64) -> bool {
+        self.peers.get(id).is_some_and(|p| p.conn == conn)
+    }
+
     pub(super) fn peer_down(&mut self, id: String, conn: u64) {
-        if self.peers.get(&id).is_some_and(|p| p.conn == conn) {
+        if self.is_current(&id, conn) {
             self.peers.remove(&id);
             self.drop_downloads_from(&id);
             log!("disconnected from {}", net::pretty_id(&id));

@@ -207,7 +207,7 @@ impl Daemon {
             Event::DialDone { id } => self.dial_done(id),
             Event::Redial { id } => self.dial(&id),
             Event::Peer { id, conn, msg } => {
-                if self.peers.get(&id).is_some_and(|p| p.conn == conn) {
+                if self.is_current(&id, conn) {
                     self.on_msg(&id, msg);
                 }
             }

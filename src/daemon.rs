@@ -227,15 +227,7 @@ impl Daemon {
         match ev {
             Event::Fs(paths) => paths.iter().for_each(|p| self.on_fs(p)),
             Event::Rescan => self.rescan_all(),
-            Event::Tick => {
-                self.ticks += 1;
-                self.broadcast(&Msg::Ping);
-                self.dial_all();
-                if self.ticks.is_multiple_of(RESCAN_TICKS) {
-                    self.rescan_all();
-                }
-                self.save_index();
-            }
+            Event::Tick => self.on_tick(),
             Event::Auth { id, addr, reply } => {
                 let ok = self.on_auth(id, addr);
                 let _ = reply.send(ok);
@@ -253,11 +245,18 @@ impl Daemon {
                 let resp = self.on_ctl(&req);
                 let _ = reply.send(resp);
             }
-            Event::Shutdown => {
-                let paths: Vec<String> = self.downloads.keys().cloned().collect();
-                paths.iter().for_each(|p| self.cancel_download(p));
-            }
+            Event::Shutdown => self.cancel_all_downloads(),
         }
+    }
+
+    fn on_tick(&mut self) {
+        self.ticks += 1;
+        self.broadcast(&Msg::Ping);
+        self.dial_all();
+        if self.ticks.is_multiple_of(RESCAN_TICKS) {
+            self.rescan_all();
+        }
+        self.save_index();
     }
 
     fn broadcast(&self, msg: &Msg) {

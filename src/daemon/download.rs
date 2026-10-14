@@ -119,6 +119,11 @@ impl Daemon {
         }
     }
 
+    pub(super) fn cancel_all_downloads(&mut self) {
+        let paths: Vec<String> = self.downloads.keys().cloned().collect();
+        paths.iter().for_each(|p| self.cancel_download(p));
+    }
+
     pub(super) fn drop_downloads_from(&mut self, id: &str) {
         let peers = &self.peers;
         let fallback = |alts: &mut Vec<String>| {

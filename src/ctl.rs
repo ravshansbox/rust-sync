@@ -128,20 +128,6 @@ mod tests {
     }
 
     #[test]
-    fn socket_path_fits_unix_limit_and_is_stable() {
-        let p = socket_path().unwrap();
-        assert!(p.as_os_str().len() < 104);
-        assert_eq!(p, socket_path().unwrap());
-        let short = crate::paths::state_dir().join("ctl.sock");
-        if short.as_os_str().len() < 100 {
-            assert_eq!(p, short);
-        } else {
-            assert!(p.starts_with("/tmp"));
-            assert_eq!(p.extension().unwrap(), "sock");
-        }
-    }
-
-    #[test]
     fn short_state_folder_keeps_socket_inside() {
         let state = PathBuf::from(format!("/{}", "s".repeat(89)));
         let p = socket_path_in(&state).unwrap();

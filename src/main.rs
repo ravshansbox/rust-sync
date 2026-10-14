@@ -50,17 +50,7 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             outln!("{}", net::pretty_id(&my_keys()?.id()));
             Ok(())
         }
-        Cmd::Path { cmd: PathCmd::Add { path } } => {
-            let abs = std::fs::canonicalize(&path).with_context(|| format!("cannot find {}", path.display()))?;
-            let is_dir = abs.is_dir();
-            if !is_dir && !abs.is_file() {
-                bail!("{} is not a regular file or folder", abs.display());
-            }
-            let portable = paths::to_portable(&abs)
-                .filter(|p| paths::to_local(p).is_some())
-                .with_context(|| format!("cannot sync {}", abs.display()))?;
-            send(Req::AddPath { path: portable, is_dir }).await
-        }
+        Cmd::Path { cmd: PathCmd::Add { path } } => path_add(path).await,
         Cmd::Path { cmd: PathCmd::List } => {
             // The daemon saves every change to the config file, so this is current either way.
             out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
@@ -88,6 +78,18 @@ async fn run(cmd: Cmd) -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+async fn path_add(path: PathBuf) -> anyhow::Result<()> {
+    let abs = std::fs::canonicalize(&path).with_context(|| format!("cannot find {}", path.display()))?;
+    let is_dir = abs.is_dir();
+    if !is_dir && !abs.is_file() {
+        bail!("{} is not a regular file or folder", abs.display());
+    }
+    let portable = paths::to_portable(&abs)
+        .filter(|p| paths::to_local(p).is_some())
+        .with_context(|| format!("cannot sync {}", abs.display()))?;
+    send(Req::AddPath { path: portable, is_dir }).await
 }
 
 fn removal_path(path: PathBuf) -> anyhow::Result<String> {

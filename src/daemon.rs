@@ -663,21 +663,26 @@ impl Daemon {
                     if std::fs::symlink_metadata(lp).is_ok_and(|m| m.is_dir()) {
                         let _ = std::fs::remove_dir(lp);
                     }
+                    let mut kept = None;
                     if let (Action::Conflict, Some(l)) = (&action, &local)
                         && lp.exists()
                     {
                         let copy = conflict_name(lp, l);
-                        match std::fs::rename(lp, &copy) {
-                            Ok(()) => log!("conflict: kept local version of {p} as {}", copy.display()),
-                            Err(e) => {
-                                let _ = std::fs::remove_file(&t);
-                                return log!("cannot keep conflict copy of {p}: {e}");
-                            }
+                        if let Err(e) = std::fs::rename(lp, &copy) {
+                            let _ = std::fs::remove_file(&t);
+                            return log!("cannot keep conflict copy of {p}: {e}");
                         }
+                        kept = Some(copy);
                     }
                     if let Err(e) = std::fs::rename(&t, lp) {
                         let _ = std::fs::remove_file(&t);
+                        if let Some(copy) = kept {
+                            let _ = std::fs::rename(copy, lp);
+                        }
                         return log!("cannot write {p}: {e}");
+                    }
+                    if let Some(copy) = kept {
+                        log!("conflict: kept local version of {p} as {}", copy.display());
                     }
                     log!("updated {p}");
                     if let (Action::Conflict, Some(l)) = (&action, &local) {
@@ -2317,6 +2322,27 @@ mod tests {
         assert!(!tmp.exists());
         assert_eq!(d.index["~/s/f.txt"].hash, r.hash);
         assert_eq!(d.outbox.len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn downloaded_conflict_winner_that_cannot_be_moved_into_place_leaves_the_local_file_where_it_was() {
+        let mut d = daemon();
+        let dir = test_dir("conflict-unwritable");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        std::fs::write(&lp, "mine").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let mut r = meta(1, 2);
+        r.hash = Some([2; 32]);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r, Some(dir.join("gone")));
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "mine");
+        assert!(!conflict_name(&lp, &local).exists());
+        assert_eq!(d.index["~/s/f.txt"], local);
+        assert!(d.outbox.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

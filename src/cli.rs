@@ -11,6 +11,7 @@ pub struct Cli {
     pub cmd: Cmd,
 }
 
+/// A top-level command.
 #[derive(Subcommand)]
 pub enum Cmd {
     /// Run the sync daemon in the foreground.
@@ -43,6 +44,7 @@ pub enum Cmd {
     Status,
 }
 
+/// A `path` subcommand.
 #[derive(Subcommand)]
 pub enum PathCmd {
     /// Start syncing a file or folder.
@@ -55,6 +57,7 @@ pub enum PathCmd {
     Remove { path: PathBuf },
 }
 
+/// A `node` subcommand.
 #[derive(Subcommand)]
 pub enum NodeCmd {
     /// Trust another node and sync with it.
@@ -70,6 +73,7 @@ pub enum NodeCmd {
     },
 }
 
+/// A `service` subcommand.
 #[derive(Subcommand)]
 pub enum ServiceCmd {
     /// Install a launchd agent that runs the daemon at login, and start it now.
@@ -88,6 +92,7 @@ pub enum ServiceCmd {
     Restart,
 }
 
+/// Arguments for `node add`.
 #[derive(Args)]
 pub struct NodeAdd {
     /// Hostname or IP, with an optional :port.

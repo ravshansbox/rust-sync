@@ -5,8 +5,8 @@
 use crate::config::Config;
 use crate::ctl::{self, Req, Resp};
 use crate::index::{self, Entry, FileMeta, Index};
-use crate::net::{self, Keys, Msg};
 use crate::log::{self, log};
+use crate::net::{self, Keys, Msg};
 use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode};

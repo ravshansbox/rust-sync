@@ -9,7 +9,8 @@ use crate::index::Entry;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use snow::{Builder, TransportState};
-use std::os::unix::fs::PermissionsExt;
+use std::io::Write;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -60,7 +61,7 @@ pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
     std::fs::create_dir_all(dir)?;
     // Another process may be creating a key now. Linking fails if one exists, so all use the same key.
     let tmp = dir.join(format!("key.{}.tmp", hex(&keys.public[..8])));
-    std::fs::write(&tmp, [keys.private.as_slice(), keys.public.as_slice()].concat())?;
+    std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?.write_all(&[keys.private.as_slice(), keys.public.as_slice()].concat())?;
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
     let linked = std::fs::hard_link(&tmp, &path);
     std::fs::remove_file(&tmp)?;

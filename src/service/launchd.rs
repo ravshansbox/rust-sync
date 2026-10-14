@@ -28,7 +28,17 @@ pub(super) fn unload(mode: Mode) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn launchctl(mode: Mode, args: &[&str]) -> anyhow::Result<()> {
+/// Ask the daemon to exit. Fails harmlessly if it is not running.
+pub(super) fn kill(mode: Mode) -> anyhow::Result<()> {
+    let _ = mode.launchctl(&["kill", "SIGTERM", &mode.target()?]);
+    Ok(())
+}
+
+pub(super) fn kickstart(mode: Mode) -> anyhow::Result<()> {
+    launchctl(mode, &["kickstart", &mode.target()?])
+}
+
+fn launchctl(mode: Mode, args: &[&str]) -> anyhow::Result<()> {
     let out = mode.launchctl(args)?;
     if !out.status.success() {
         bail!("launchctl {} failed: {}", args[0], String::from_utf8_lossy(&out.stderr).trim());

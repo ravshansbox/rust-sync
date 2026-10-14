@@ -19,7 +19,7 @@ mod launchd;
 mod mode;
 mod plist;
 
-use launchd::{bootstrap, launchctl, loaded, unload};
+use launchd::{bootstrap, kickstart, kill, loaded, unload};
 use mode::{Mode, uid};
 use plist::{plist_xml, remove_plist, write_plist};
 
@@ -170,7 +170,7 @@ fn installed_or_bail() -> anyhow::Result<Mode> {
 /// (`KeepAlive` / `SuccessfulExit` = false), so it stays stopped.
 async fn stop_now(mode: Mode) -> anyhow::Result<()> {
     if loaded(mode)? {
-        let _ = mode.launchctl(&["kill", "SIGTERM", &mode.target()?]);
+        kill(mode)?;
     }
     if !wait_for(false).await? {
         bail!("still running. If you started it with `rust-sync daemon`, stop it there with Ctrl-C.");
@@ -180,7 +180,7 @@ async fn stop_now(mode: Mode) -> anyhow::Result<()> {
 
 async fn start_now(mode: Mode) -> anyhow::Result<()> {
     if loaded(mode)? {
-        launchctl(mode, &["kickstart", &mode.target()?])?;
+        kickstart(mode)?;
     } else {
         // Not loaded, for example after `launchctl bootout`. Loading it starts it (`RunAtLoad`).
         bootstrap(mode)?;

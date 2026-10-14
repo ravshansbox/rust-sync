@@ -591,17 +591,17 @@ impl Daemon {
             (None, Some(_)) => FileMeta { hash: None, size: 0, mtime: index::now(), mode: 0, vv: bump(&old), by: me },
             (Some(s), Some(m)) if !m.deleted() && (m.size, m.mtime, m.mode) == (s.size, s.mtime, s.mode) => return,
             (Some(s), _) => {
-                let Ok(hash) = index::hash_file(lp) else { return };
+                let Ok((hash, size)) = index::hash_file(lp) else { return };
                 if let Some(m) = self.index.get_mut(p)
                     && m.hash == Some(hash)
                     && m.mode == s.mode
                 {
                     // Only the timestamp changed. Remember it, but it is not a new version.
-                    (m.size, m.mtime) = (s.size, s.mtime);
+                    (m.size, m.mtime) = (size, s.mtime);
                     self.index_dirty = true;
                     return;
                 }
-                FileMeta { hash: Some(hash), size: s.size, mtime: s.mtime, mode: s.mode, vv: bump(&old), by: me }
+                FileMeta { hash: Some(hash), size, mtime: s.mtime, mode: s.mode, vv: bump(&old), by: me }
             }
         };
         self.set_entry(p, new);
@@ -2696,7 +2696,7 @@ mod tests {
         std::fs::write(&lp, "one").unwrap();
         d.check_file(p, &lp);
         assert_eq!(d.index[p].vv, Vv(vec![(me, 1)]));
-        assert_eq!(d.index[p].hash, Some(index::hash_file(&lp).unwrap()));
+        assert_eq!(d.index[p].hash, Some(index::hash_file(&lp).unwrap().0));
         assert_eq!(d.outbox.len(), 1);
         d.check_file(p, &lp);
         assert_eq!(d.outbox.len(), 1);
@@ -2717,6 +2717,23 @@ mod tests {
         assert_eq!(d.outbox.len(), 3);
         d.check_file(p, &lp);
         assert_eq!(d.outbox.len(), 3);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn file_that_grows_while_being_hashed_is_announced_with_the_size_of_the_hashed_content() {
+        let mut d = daemon();
+        let dir = test_dir("grows");
+        std::fs::create_dir_all(&dir).unwrap();
+        let lp = dir.join("f.txt");
+        let p = "~/s/f.txt";
+        std::fs::write(&lp, "one").unwrap();
+        let before = index::stat(&lp).unwrap();
+        std::fs::write(&lp, "one two").unwrap();
+        d.check_stat(p, &lp, Some(before));
+        assert_eq!(d.index[p].hash, Some(index::hash_file(&lp).unwrap().0));
+        assert_eq!(d.index[p].size, 7);
+        assert_eq!(d.outbox[0].meta.size, 7);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

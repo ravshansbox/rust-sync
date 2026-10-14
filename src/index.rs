@@ -133,10 +133,10 @@ pub fn now() -> i64 {
     nanos(SystemTime::now())
 }
 
-pub fn hash_file(p: &Path) -> std::io::Result<[u8; 32]> {
+pub fn hash_file(p: &Path) -> std::io::Result<([u8; 32], u64)> {
     let mut h = blake3::Hasher::new();
-    h.update_reader(std::fs::File::open(p)?)?;
-    Ok(*h.finalize().as_bytes())
+    let size = std::io::copy(&mut std::fs::File::open(p)?, &mut h)?;
+    Ok((*h.finalize().as_bytes(), size))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -332,9 +332,9 @@ mod tests {
         let file = dir.join("f");
         let data: Vec<u8> = (0..150_000u32).map(|i| (i % 251) as u8).collect();
         std::fs::write(&file, &data).unwrap();
-        assert_eq!(hash_file(&file).unwrap(), *blake3::hash(&data).as_bytes());
+        assert_eq!(hash_file(&file).unwrap(), (*blake3::hash(&data).as_bytes(), data.len() as u64));
         std::fs::write(&file, b"").unwrap();
-        assert_eq!(hash_file(&file).unwrap(), *blake3::hash(b"").as_bytes());
+        assert_eq!(hash_file(&file).unwrap(), (*blake3::hash(b"").as_bytes(), 0));
         assert!(hash_file(&dir.join("missing")).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }

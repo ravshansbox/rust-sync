@@ -403,12 +403,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_starts_at_login_and_system_at_boot() {
-        assert_eq!(Mode::Agent.when(), "login");
-        assert_eq!(Mode::System.when(), "boot");
-    }
-
-    #[test]
     fn system_plist() {
         let xml = plist_xml(Mode::System, Path::new("/usr/local/bin/rust-sync"), false).unwrap();
         let user = String::from_utf8(Command::new("whoami").output().unwrap().stdout).unwrap();

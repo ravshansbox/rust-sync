@@ -66,17 +66,7 @@ pub(super) async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>,
 /// `ATTEMPT_DELAY`, alternating IPv6 and IPv4, and keeps the first that connects
 /// (Happy Eyeballs, RFC 8305). A failed attempt starts the next one at once.
 pub(super) async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
-    let (v6, v4): (Vec<SocketAddr>, Vec<SocketAddr>) =
-        tokio::net::lookup_host(addr).await?.partition(SocketAddr::is_ipv6);
-    let mut order = Vec::with_capacity(v6.len() + v4.len());
-    let (mut v6, mut v4) = (v6.into_iter(), v4.into_iter());
-    loop {
-        match (v6.next(), v4.next()) {
-            (None, None) => break,
-            (a, b) => order.extend(a.into_iter().chain(b)),
-        }
-    }
-    let mut next = order.into_iter();
+    let mut next = interleave(tokio::net::lookup_host(addr).await?).into_iter();
     let mut attempts = tokio::task::JoinSet::new();
     let mut last_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no addresses found");
     loop {
@@ -94,6 +84,19 @@ pub(super) async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
             () = tokio::time::sleep(ATTEMPT_DELAY), if next.len() > 0 => {}
         }
     }
+}
+
+fn interleave(addrs: impl Iterator<Item = SocketAddr>) -> Vec<SocketAddr> {
+    let (v6, v4): (Vec<SocketAddr>, Vec<SocketAddr>) = addrs.partition(SocketAddr::is_ipv6);
+    let mut order = Vec::with_capacity(v6.len() + v4.len());
+    let (mut v6, mut v4) = (v6.into_iter(), v4.into_iter());
+    loop {
+        match (v6.next(), v4.next()) {
+            (None, None) => break,
+            (a, b) => order.extend(a.into_iter().chain(b)),
+        }
+    }
+    order
 }
 
 /// Handle one connection from start to end. `expect` is set when we dialled out.

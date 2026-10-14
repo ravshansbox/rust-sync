@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn to_local_rejects_absolute_path_that_reaches_home_or_state_folder_at_another_depth() {
-        let tmp = std::env::temp_dir().canonicalize().unwrap().join(format!("rust-sync-to-local-link-{}", std::process::id()));
+        let tmp = resolve_parent(test_dir("to-local-link"));
         std::fs::create_dir_all(tmp.join("a/b")).unwrap();
         std::fs::create_dir_all(state_dir()).unwrap();
         let _ = std::fs::remove_file(tmp.join("a/b/home"));

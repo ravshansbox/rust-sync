@@ -7,10 +7,11 @@ use crate::net;
 use crate::{daemon, paths, service};
 use anyhow::{Context, bail};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 mod node;
+mod path;
 use node::node_add;
+use path::{path_add, removal_path};
 
 pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
@@ -47,24 +48,6 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
             Ok(())
         }
     }
-}
-
-async fn path_add(path: PathBuf) -> anyhow::Result<()> {
-    let abs = std::fs::canonicalize(&path).with_context(|| format!("cannot find {}", path.display()))?;
-    let is_dir = abs.is_dir();
-    if !is_dir && !abs.is_file() {
-        bail!("{} is not a regular file or folder", abs.display());
-    }
-    let portable = paths::to_portable(&abs)
-        .filter(|p| paths::to_local(p).is_some())
-        .with_context(|| format!("cannot sync {}", abs.display()))?;
-    send(Req::AddPath { path: portable, is_dir }).await
-}
-
-fn removal_path(path: PathBuf) -> anyhow::Result<String> {
-    // The path may be gone already, so do not require it to exist.
-    let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| paths::resolve_parent(path));
-    paths::to_portable(&abs).context("path is not valid UTF-8")
 }
 
 fn my_keys() -> anyhow::Result<net::Keys> {
@@ -106,6 +89,7 @@ mod tests {
     use super::*;
     use crate::cli::NodeAdd;
     use crate::net::Msg;
+    use std::path::PathBuf;
     #[tokio::test]
     async fn path_add_rejects_missing_special_and_state_paths() {
         let add = |p: &str| run(Cmd::Path { cmd: PathCmd::Add { path: PathBuf::from(p) } });

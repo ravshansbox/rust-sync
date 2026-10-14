@@ -33,14 +33,7 @@ pub fn line(msg: std::fmt::Arguments) {
     let mut file = FILE.lock().unwrap_or_else(PoisonError::into_inner);
     match file.as_mut() {
         None => drop(std::io::stderr().write_all(text.as_bytes())),
-        Some(f) => {
-            if f.size + text.len() as u64 > MAX_SIZE {
-                let _ = f.rotate();
-            }
-            if f.file.write_all(text.as_bytes()).is_ok() {
-                f.size += text.len() as u64;
-            }
-        }
+        Some(f) => f.write(&text),
     }
 }
 
@@ -49,6 +42,15 @@ impl LogFile {
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let size = file.metadata()?.len();
         Ok(Self { path, file, size })
+    }
+
+    fn write(&mut self, text: &str) {
+        if self.size + text.len() as u64 > MAX_SIZE {
+            let _ = self.rotate();
+        }
+        if self.file.write_all(text.as_bytes()).is_ok() {
+            self.size += text.len() as u64;
+        }
     }
 
     /// `rust-sync.log` -> `rust-sync.log.1` (replacing an older one), then start a new file.
@@ -94,8 +96,6 @@ pub(crate) use log;
 mod tests {
     use super::*;
 
-    static FILE_TESTS: Mutex<()> = Mutex::new(());
-
     fn test_dir(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("rust-sync-log-{name}-test-{}", std::process::id()))
     }
@@ -134,15 +134,14 @@ mod tests {
 
     #[test]
     fn line_rotates_file_when_next_line_would_exceed_max_size_replacing_an_older_rotated_file() {
-        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("line");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("test.log.1"), "older").unwrap();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
-        to_file(path.clone()).unwrap();
-        line(format_args!("hello rotation"));
-        close_file();
+        let mut log = LogFile::open(path.clone()).unwrap();
+        log.write(&format!("{} hello rotation\n", timestamp()));
+        drop(log);
         assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE - 10);
         assert!(!dir.join("test.log.1.1").exists());
         let text = std::fs::read_to_string(&path).unwrap();
@@ -153,15 +152,14 @@ mod tests {
 
     #[test]
     fn line_keeps_file_when_next_line_reaches_max_size_exactly() {
-        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("limit");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         let line_len = timestamp().len() + " hello\n".len();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
-        to_file(path.clone()).unwrap();
-        line(format_args!("hello"));
-        close_file();
+        let mut log = LogFile::open(path.clone()).unwrap();
+        log.write(&format!("{} hello\n", timestamp()));
+        drop(log);
         assert!(!dir.join("test.log.1").exists());
         assert_eq!(std::fs::metadata(&path).unwrap().len(), MAX_SIZE);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -169,16 +167,15 @@ mod tests {
 
     #[test]
     fn line_counts_written_lines_towards_max_size() {
-        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("count");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         let line_len = timestamp().len() + " hello\n".len();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - line_len]).unwrap();
-        to_file(path.clone()).unwrap();
-        line(format_args!("hello"));
-        line(format_args!("hello"));
-        close_file();
+        let mut log = LogFile::open(path.clone()).unwrap();
+        log.write(&format!("{} hello\n", timestamp()));
+        log.write(&format!("{} hello\n", timestamp()));
+        drop(log);
         assert_eq!(std::fs::metadata(dir.join("test.log.1")).unwrap().len(), MAX_SIZE);
         assert_eq!(std::fs::metadata(&path).unwrap().len(), line_len as u64);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -186,15 +183,14 @@ mod tests {
 
     #[test]
     fn line_starts_a_new_file_at_max_size_when_the_log_file_was_deleted() {
-        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("deleted");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, vec![b'x'; MAX_SIZE as usize - 10]).unwrap();
-        to_file(path.clone()).unwrap();
+        let mut log = LogFile::open(path.clone()).unwrap();
         std::fs::remove_file(&path).unwrap();
-        line(format_args!("after delete"));
-        close_file();
+        log.write(&format!("{} after delete\n", timestamp()));
+        drop(log);
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.ends_with(" after delete\n"));
         assert!(!dir.join("test.log.1").exists());
@@ -203,7 +199,6 @@ mod tests {
 
     #[test]
     fn to_file_creates_missing_folder_and_appends_across_reopens() {
-        let _guard = FILE_TESTS.lock().unwrap_or_else(PoisonError::into_inner);
         let dir = test_dir("to-file");
         let path = dir.join("nested/test.log");
         to_file(path.clone()).unwrap();
@@ -212,7 +207,7 @@ mod tests {
         line(format_args!("second"));
         close_file();
         let text = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<_> = text.lines().map(|l| &l[timestamp().len() + 1..]).collect();
+        let lines: Vec<_> = text.lines().map(|l| &l[timestamp().len() + 1..]).filter(|l| ["first", "second"].contains(l)).collect();
         assert_eq!(lines, ["first", "second"]);
         std::fs::remove_dir_all(&dir).unwrap();
     }

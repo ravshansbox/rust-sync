@@ -420,7 +420,7 @@ impl Daemon {
         let unwanted: Vec<String> = self
             .downloads
             .keys()
-            .filter(|p| self.cfg.root_of(p).is_none() || self.cfg.active_root(p).is_some_and(|r| r.is_dir) || self.below_file_root(p))
+            .filter(|p| self.cfg.root_of(p).is_none() || self.not_a_synced_file(p))
             .cloned()
             .collect();
         for p in unwanted {
@@ -524,7 +524,7 @@ impl Daemon {
         let mut seen = HashSet::new();
         match std::fs::symlink_metadata(&lp) {
             Ok(m) if m.is_dir() => self.walk(&lp, &mut seen),
-            _ if !self.below_file_root(p) && !self.cfg.active_root(p).is_some_and(|r| r.is_dir) => {
+            _ if !self.not_a_synced_file(p) => {
                 self.check_file(p, &lp);
                 seen.insert(p.to_string());
             }
@@ -557,7 +557,7 @@ impl Daemon {
                 self.walk(&path, seen);
             } else if ft.is_file()
                 && let Some(p) = paths::to_portable(&path)
-                && !self.below_file_root(&p)
+                && !self.not_a_synced_file(&p)
             {
                 self.check_file(&p, &path);
                 seen.insert(p);
@@ -565,8 +565,9 @@ impl Daemon {
         }
     }
 
-    fn below_file_root(&self, p: &str) -> bool {
-        self.cfg.active_roots().any(|(r, re)| !re.is_dir && r != p && paths::is_under(p, r))
+    fn not_a_synced_file(&self, p: &str) -> bool {
+        self.cfg.active_root(p).is_some_and(|r| r.is_dir)
+            || self.cfg.active_roots().any(|(r, re)| !re.is_dir && r != p && paths::is_under(p, r))
     }
 
     fn local_root(&self, p: &str) -> Option<PathBuf> {
@@ -632,7 +633,7 @@ impl Daemon {
         e.meta.mode &= 0o777;
         let Some(root) = self.local_root(&e.path) else { return };
         let Some(lp) = paths::to_local(&e.path) else { return };
-        if !e.meta.deleted() && (self.cfg.active_root(&e.path).is_some_and(|r| r.is_dir) || self.below_file_root(&e.path)) || paths::through_symlink(&lp, &root) {
+        if !e.meta.deleted() && self.not_a_synced_file(&e.path) || paths::through_symlink(&lp, &root) {
             return;
         }
         if lp.file_name().and_then(|n| n.to_str()).is_none_or(paths::ignored) {
@@ -2949,6 +2950,22 @@ mod tests {
         d.check_tree(&fp);
         assert!(d.index.is_empty());
         assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_file_that_replaced_a_synced_folder_inside_another_synced_folder_is_not_recorded() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("nested-folder-to-file");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("f"), "x").unwrap();
+        std::fs::write(dir.join("g"), "y").unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_root(&me, &format!("{rp}/f"), true, false);
+        d.check_tree(&rp);
+        assert_eq!(d.index.keys().collect::<Vec<_>>(), [&format!("{rp}/g")]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

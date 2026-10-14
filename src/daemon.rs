@@ -179,7 +179,7 @@ impl Daemon {
         tx: mpsc::UnboundedSender<Event>,
     ) -> Self {
         let me = keys.id();
-        Daemon {
+        Self {
             me_short: net::short_id(&me),
             me,
             keys,

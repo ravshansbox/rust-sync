@@ -35,7 +35,7 @@ pub(super) struct Download {
 
 impl Download {
     pub(super) fn new(from: &str, meta: FileMeta, tmp: PathBuf, file: File) -> Self {
-        Download { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
+        Self { from: from.to_string(), meta, tmp, file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
     }
 }
 

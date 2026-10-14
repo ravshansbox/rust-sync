@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::download::MAX_DOWNLOADS;
 
 #[tokio::test]
 async fn download_refused_by_its_node_is_requested_from_another_node_that_offered_it() {

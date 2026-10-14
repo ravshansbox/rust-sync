@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::download::MAX_DOWNLOADS;
 use crate::daemon::peers::{MAX_BACKOFF, MAX_PENDING};
 
 #[test]

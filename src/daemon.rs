@@ -37,7 +37,6 @@ pub use text::{nodes_text, paths_text, status_text};
 const TICK: Duration = Duration::from_secs(30);
 /// Full rescan every this many ticks (15 minutes), in case the watcher missed something.
 const RESCAN_TICKS: u64 = 30;
-const MAX_DOWNLOADS: usize = 8;
 const MAX_UPLOADS: usize = 8;
 
 enum Event {

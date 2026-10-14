@@ -1,4 +1,4 @@
-use super::{Daemon, MAX_DOWNLOADS};
+use super::Daemon;
 use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;
 use crate::net::Msg;
@@ -9,6 +9,8 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
+
+pub(super) const MAX_DOWNLOADS: usize = 8;
 
 pub(super) struct Download {
     pub(super) from: String,

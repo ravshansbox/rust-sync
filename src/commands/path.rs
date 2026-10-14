@@ -7,6 +7,7 @@ use crate::{daemon, paths};
 use anyhow::{Context, bail};
 use std::path::PathBuf;
 
+/// Check that the path is a file or folder we can sync, then ask the daemon to add it.
 pub(super) async fn path_add(path: PathBuf) -> anyhow::Result<()> {
     let abs = std::fs::canonicalize(&path).with_context(|| format!("cannot find {}", path.display()))?;
     let is_dir = abs.is_dir();
@@ -19,12 +20,14 @@ pub(super) async fn path_add(path: PathBuf) -> anyhow::Result<()> {
     send(Req::AddPath { path: portable, is_dir }).await
 }
 
+/// Print the synced paths from the config file.
 pub(super) fn path_list() -> anyhow::Result<()> {
     // The daemon saves every change to the config file, so this is current either way.
     out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
     Ok(())
 }
 
+/// Turn the path into the portable form the daemon uses to find it for removal.
 pub(super) fn removal_path(path: PathBuf) -> anyhow::Result<String> {
     // The path may be gone already, so do not require it to exist.
     let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| paths::resolve_parent(path));

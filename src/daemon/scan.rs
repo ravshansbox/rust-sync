@@ -64,6 +64,10 @@ impl Daemon {
             }
             _ => {}
         }
+        self.check_missing(p, &seen);
+    }
+
+    fn check_missing(&mut self, p: &str, seen: &HashSet<String>) {
         let missing: Vec<String> = index::under(&self.index, p)
             .filter(|(k, _)| !seen.contains(*k))
             .map(|(k, _)| k.clone())

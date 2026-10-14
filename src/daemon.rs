@@ -840,6 +840,7 @@ impl Daemon {
 
     fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
         let _ = std::fs::remove_file(&d.tmp);
+        self.remove_empty_parents(&p, &d.tmp);
         d.alts.retain(|a| a != gone && self.peers.contains_key(a));
         if !d.alts.is_empty() {
             let alt = d.alts.remove(0);
@@ -2825,6 +2826,28 @@ mod tests {
         d.on_entry("aa", Entry { path: p.clone(), meta: FileMeta { hash: None, size: 0, vv: Vv(vec![(1, 2)]), ..r } });
         let msg = Msg::Data { path: p, hash, offset: 0, bytes: b"abc".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
+        assert!(!root.join("a").exists());
+        assert!(root.is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn download_refused_with_no_other_source_removes_the_folders_it_created() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("refused-download-folders");
+        let root = dir.join("s");
+        std::fs::create_dir_all(&root).unwrap();
+        let rp = root.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let _a = up(&mut d, "aa", 1);
+        let p = format!("{rp}/a/b/f");
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        let hash = r.hash.unwrap();
+        d.on_entry("aa", Entry { path: p.clone(), meta: r });
+        assert!(root.join("a/b").is_dir());
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Unavailable { path: p, hash } });
         assert!(!root.join("a").exists());
         assert!(root.is_dir());
         std::fs::remove_dir_all(&dir).unwrap();

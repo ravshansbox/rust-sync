@@ -138,7 +138,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
         cfg.port = p;
     }
     cfg.save(&config_file)?;
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, rx) = mpsc::unbounded_channel();
 
     let watcher = watch(tx.clone())?;
 
@@ -160,15 +160,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     d.outbox.clear();
     d.dial_all();
 
-    while let Some(ev) = rx.recv().await {
-        let stop = matches!(ev, Event::Shutdown);
-        d.handle(ev);
-        if stop {
-            break;
-        }
-        d.pump_queue();
-        d.flush();
-    }
+    d.event_loop(rx).await;
 
     log!("stopping");
     d.save_index();
@@ -209,6 +201,18 @@ impl Daemon {
             outbox: Vec::new(),
             index_dirty: false,
             ticks: 0,
+        }
+    }
+
+    async fn event_loop(&mut self, mut rx: mpsc::UnboundedReceiver<Event>) {
+        while let Some(ev) = rx.recv().await {
+            let stop = matches!(ev, Event::Shutdown);
+            self.handle(ev);
+            if stop {
+                break;
+            }
+            self.pump_queue();
+            self.flush();
         }
     }
 

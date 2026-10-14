@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
+/// A request from the CLI to the daemon.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Req {
     AddPath { path: String, is_dir: bool },
@@ -19,6 +20,7 @@ pub enum Req {
     Status,
 }
 
+/// The daemon's reply: whether the request worked, and the text to show.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Resp {
     pub ok: bool,

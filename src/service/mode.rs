@@ -5,6 +5,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// How the service is installed: as a per-user launch agent or a system-wide launch daemon.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Mode {
     Agent,

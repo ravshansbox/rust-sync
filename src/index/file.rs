@@ -2,6 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// What `stat` reads from a regular file: size in bytes, mtime in nanoseconds and permission bits.
 pub struct Stat {
     pub size: u64,
     pub mtime: i64,

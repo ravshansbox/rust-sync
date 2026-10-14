@@ -20,6 +20,7 @@ pub fn stat(p: &Path) -> Option<Stat> {
     Some(Stat { size: m.len(), mtime: nanos(m.modified().ok()?), mode: m.permissions().mode() & 0o777 })
 }
 
+/// Nanoseconds since the Unix epoch, negative for times before it.
 pub fn nanos(t: SystemTime) -> i64 {
     match t.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_nanos() as i64,
@@ -27,10 +28,12 @@ pub fn nanos(t: SystemTime) -> i64 {
     }
 }
 
+/// The current time in nanoseconds since the Unix epoch.
 pub fn now() -> i64 {
     nanos(SystemTime::now())
 }
 
+/// BLAKE3 hash of a file's contents and the number of bytes read.
 pub fn hash_file(p: &Path) -> std::io::Result<([u8; 32], u64)> {
     let mut h = blake3::Hasher::new();
     let size = std::io::copy(&mut std::fs::File::open(p)?, &mut h)?;

@@ -2352,6 +2352,31 @@ mod tests {
     }
 
     #[test]
+    fn downloaded_conflict_winner_is_dropped_when_the_local_version_cannot_be_kept_as_a_copy() {
+        let mut d = daemon();
+        let dir = test_dir("conflict-copy-blocked");
+        std::fs::create_dir_all(&dir).unwrap();
+        let (lp, tmp) = (dir.join("f.txt"), dir.join(".f.txt.rsync-tmp"));
+        std::fs::write(&lp, "mine").unwrap();
+        std::fs::write(&tmp, "theirs").unwrap();
+        let mut local = meta(0, 1);
+        local.vv = Vv(vec![(1, 1)]);
+        d.index.insert("~/s/f.txt".into(), local.clone());
+        let copy = conflict_name(&lp, &local);
+        std::fs::create_dir_all(copy.join("sub")).unwrap();
+        let mut r = meta(1, 2);
+        r.hash = Some([2; 32]);
+        r.vv = Vv(vec![(2, 1)]);
+        d.apply("aa", "~/s/f.txt", &lp, r, Some(tmp.clone()));
+        assert_eq!(std::fs::read_to_string(&lp).unwrap(), "mine");
+        assert!(copy.join("sub").is_dir());
+        assert!(!tmp.exists());
+        assert_eq!(d.index["~/s/f.txt"], local);
+        assert!(d.outbox.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn downloaded_conflict_winner_with_the_longest_allowed_name_keeps_the_local_copy() {
         let mut d = daemon();
         let dir = test_dir("conflict-long-name");

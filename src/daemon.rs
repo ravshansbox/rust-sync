@@ -100,6 +100,7 @@ pub async fn run(port: Option<u16>, log_file: Option<PathBuf>) -> anyhow::Result
     res
 }
 
+/// Refuse to start if a daemon is already running, then start the watcher, listeners and timers and run the event loop until shutdown.
 async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     let dir = paths::state_dir();
     std::fs::create_dir_all(dir)?;
@@ -135,6 +136,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Load the config, override its port with `port` if given, and save it back.
 fn load_config(config_file: &Path, port: Option<u16>) -> anyhow::Result<Config> {
     let mut cfg = Config::load(config_file)?;
     if let Some(p) = port {

@@ -98,7 +98,7 @@ impl Daemon {
         Some(self.peers.contains_key(id))
     }
 
-    pub(super) fn status(&self) -> String {
+    fn status(&self) -> String {
         let s = status_text(&self.cfg, &self.me, |id| self.connected(id), &self.pending);
         let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.is_synced(p)).count();
         format!(

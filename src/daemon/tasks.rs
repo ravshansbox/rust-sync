@@ -1,3 +1,5 @@
+//! Background tasks that feed the daemon's event loop: the file watcher, control socket, tick and shutdown signal.
+
 use super::{ACCEPT_RETRY, Event, TICK};
 use crate::ctl::Resp;
 use notify::RecommendedWatcher;

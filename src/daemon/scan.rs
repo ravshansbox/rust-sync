@@ -1,3 +1,5 @@
+//! Watching synced paths and comparing files on disk with the index to find local changes.
+
 use super::Daemon;
 use crate::index::{self, FileMeta, Vv};
 use crate::log::log;

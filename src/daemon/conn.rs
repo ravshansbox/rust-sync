@@ -1,3 +1,5 @@
+//! Listening for and dialling peers, the handshake, and passing messages for each connection.
+
 use super::{ACCEPT_RETRY, Event};
 use crate::config;
 use crate::log::log;

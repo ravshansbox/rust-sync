@@ -1,3 +1,5 @@
+//! Sending requested files to peers in chunks, with a limit on how many go at once.
+
 use super::Daemon;
 use crate::index;
 use crate::net::{self, Msg};

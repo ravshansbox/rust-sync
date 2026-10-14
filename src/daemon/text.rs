@@ -1,3 +1,5 @@
+//! Plain-text output for the status, path list and node list commands.
+
 use crate::config::Config;
 use crate::net;
 use std::collections::BTreeMap;

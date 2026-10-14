@@ -10,6 +10,9 @@ use anyhow::{Context, bail};
 use std::time::Duration;
 use tokio::time::timeout;
 
+/// Give up on each step of probing a node (connect, hello reply) after this long.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Connect to the node, show its ID, and trust it once the user confirms.
 pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     let keys = my_keys()?;
@@ -52,7 +55,7 @@ pub(super) fn node_id(s: &str) -> anyhow::Result<String> {
 /// Connect to the node at addr and return its ID and whether it trusts this node.
 async fn probe(addr: &str, keys: &net::Keys, cfg: &Config) -> anyhow::Result<(String, bool)> {
     outln!("Connecting to {addr}...");
-    let stream = timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(addr))
+    let stream = timeout(PROBE_TIMEOUT, tokio::net::TcpStream::connect(addr))
         .await
         .context("timed out")?
         .with_context(|| format!("cannot connect to {addr}. Is `rust-sync daemon` running there?"))?;
@@ -62,7 +65,7 @@ async fn probe(addr: &str, keys: &net::Keys, cfg: &Config) -> anyhow::Result<(St
     }
     w.send(&Msg::Hello { port: cfg.port, probe: true, trusts_you: cfg.trusted(&id).is_some() }).await?;
     let trusts_us = matches!(
-        timeout(Duration::from_secs(10), r.recv()).await,
+        timeout(PROBE_TIMEOUT, r.recv()).await,
         Ok(Ok(Msg::Hello { trusts_you: true, .. }))
     );
     Ok((id, trusts_us))

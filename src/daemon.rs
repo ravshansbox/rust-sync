@@ -885,7 +885,7 @@ impl Daemon {
     fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
         let Some(peer) = self.peers.get(from) else { return };
         let root = self.local_root(&path);
-        let ok = root.is_some() && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
+        let ok = root.is_some() && !self.not_a_synced_file(&path) && self.index.get(&path).is_some_and(|m| m.hash == Some(hash));
         let safe = |lp: &Path| index::stat(lp).is_some() && !root.as_ref().is_some_and(|r| paths::through_symlink(lp, r));
         match paths::to_local(&path) {
             Some(lp) if ok && safe(&lp) => drop(tokio::spawn(upload(lp, root, path, hash, peer.data.clone(), self.uploads.clone()))),
@@ -1797,6 +1797,27 @@ mod tests {
             d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.into(), hash } });
             assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p, .. }) if p == path));
         }
+    }
+
+    #[tokio::test]
+    async fn request_is_refused_for_a_file_below_a_synced_file_path() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("request-below-file-root");
+        std::fs::create_dir_all(dir.join("s/f")).unwrap();
+        std::fs::write(dir.join("s/f/x"), "abc").unwrap();
+        let rp = dir.join("s").to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_root(&me, &format!("{rp}/f"), false, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let hash = *blake3::hash(b"abc").as_bytes();
+        let path = format!("{rp}/f/x");
+        d.index.insert(path.clone(), FileMeta { hash: Some(hash), size: 3, ..meta(0, 0) });
+        let mut rx = up(&mut d, "aa", 1);
+        while rx.try_recv().is_ok() {}
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Request { path: path.clone(), hash } });
+        assert!(matches!(rx.try_recv(), Ok(Msg::Unavailable { path: p, .. }) if p == path));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]

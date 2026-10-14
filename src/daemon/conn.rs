@@ -41,7 +41,7 @@ pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::Unbou
     loop {
         match l.accept().await {
             Ok((s, addr)) => {
-                drop(tokio::spawn(connection(s, addr.ip().to_canonical(), None, keys.clone(), tx.clone(), port)));
+                tokio::spawn(connection(s, addr.ip().to_canonical(), None, keys.clone(), tx.clone(), port));
             }
             Err(_) => tokio::time::sleep(ACCEPT_RETRY).await,
         }

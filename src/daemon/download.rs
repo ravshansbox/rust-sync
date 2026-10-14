@@ -6,6 +6,7 @@ use crate::paths;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 
 impl Daemon {
@@ -110,8 +111,7 @@ impl Daemon {
 
     pub(super) fn cancel_download(&mut self, p: &str) {
         if let Some(d) = self.downloads.remove(p) {
-            let _ = std::fs::remove_file(&d.tmp);
-            self.remove_empty_parents(p, &d.tmp);
+            self.discard_tmp(p, &d.tmp);
         }
     }
 
@@ -139,13 +139,17 @@ impl Daemon {
     }
 
     fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
-        let _ = std::fs::remove_file(&d.tmp);
-        self.remove_empty_parents(&p, &d.tmp);
+        self.discard_tmp(&p, &d.tmp);
         d.alts.retain(|a| a != gone && self.peers.contains_key(a));
         if !d.alts.is_empty() {
             let alt = d.alts.remove(0);
             self.queued.entry(p).or_insert((alt, d.meta, d.alts));
         }
+    }
+
+    fn discard_tmp(&self, p: &str, tmp: &Path) {
+        let _ = std::fs::remove_file(tmp);
+        self.remove_empty_parents(p, tmp);
     }
 }
 

@@ -99,6 +99,7 @@ pub fn apply(cfg: &mut Config, me: &str, req: &Req) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_dir;
 
     #[test]
     fn apply_edits_config_and_rejects_unknown_paths_and_nodes() {
@@ -138,7 +139,7 @@ mod tests {
 
     #[test]
     fn socket_path_of_100_bytes_moves_to_tmp() {
-        let base = std::env::temp_dir().join(format!("rust-sync-sock100-{}", std::process::id()));
+        let base = test_dir("sock100");
         let pad = 100 - base.as_os_str().len() - "/".len() - "/ctl.sock".len();
         let state = base.join("a".repeat(pad));
         assert_eq!(state.join("ctl.sock").as_os_str().len(), 100);
@@ -150,7 +151,7 @@ mod tests {
 
     #[test]
     fn long_state_folder_gets_private_socket_in_tmp() {
-        let base = std::env::temp_dir().join(format!("rust-sync-sock-{}", std::process::id()));
+        let base = test_dir("sock");
         let state = base.join("a".repeat(100));
         let p = socket_path_in(&state, Path::new("/tmp")).unwrap();
         assert!(p.as_os_str().len() < 104);
@@ -168,7 +169,7 @@ mod tests {
     fn tmp_socket_folder_that_is_not_private_is_rejected() {
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
-        let base = std::env::temp_dir().join(format!("rust-sync-sock-shared-{}", std::process::id()));
+        let base = test_dir("sock-shared");
         let state = base.join("a".repeat(100));
         std::fs::create_dir_all(&state).unwrap();
         let dir = base.join(format!("rust-sync-{}", std::fs::metadata(&state).unwrap().uid()));

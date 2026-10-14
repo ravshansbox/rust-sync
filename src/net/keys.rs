@@ -72,6 +72,7 @@ pub fn short_id(id: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_dir;
 
     const ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -111,7 +112,7 @@ mod tests {
 
     #[test]
     fn load_or_create_keys_persists_private_key_and_rejects_damaged_file() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-keys-{}", std::process::id()));
+        let dir = test_dir("keys");
         let created = load_or_create_keys(&dir).unwrap();
         let path = dir.join("key");
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
@@ -127,7 +128,7 @@ mod tests {
 
     #[test]
     fn load_or_create_keys_fails_when_key_exists_but_cannot_be_read() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-keys-unreadable-{}", std::process::id()));
+        let dir = test_dir("keys-unreadable");
         std::fs::create_dir_all(dir.join("key")).unwrap();
         assert!(load_or_create_keys(&dir).is_err());
         assert!(dir.join("key").is_dir());
@@ -136,7 +137,7 @@ mod tests {
 
     #[test]
     fn keys_created_at_the_same_time_are_the_same_key() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-keys-race-{}", std::process::id()));
+        let dir = test_dir("keys-race");
         for _ in 0..20 {
             let _ = std::fs::remove_dir_all(&dir);
             let ids: Vec<String> = std::thread::scope(|s| {

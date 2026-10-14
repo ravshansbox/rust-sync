@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn write_atomic_replaces_contents_and_leaves_no_temp_file() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-write-atomic-{}", std::process::id()));
+        let dir = test_dir("write-atomic");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("state.json");
         std::fs::write(&path, "old").unwrap();

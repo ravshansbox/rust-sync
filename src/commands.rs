@@ -93,6 +93,7 @@ mod tests {
     use super::*;
     use crate::cli::NodeAdd;
     use crate::net::Msg;
+    use crate::paths::test_dir;
     use std::path::PathBuf;
     #[tokio::test]
     async fn path_add_rejects_missing_special_and_state_paths() {
@@ -107,7 +108,7 @@ mod tests {
     #[tokio::test]
     async fn path_add_saves_canonical_path_and_whether_it_is_a_folder() {
         let _key = STATE_KEY.lock().await;
-        let tmp = std::env::temp_dir().join(format!("rust-sync-path-add-{}", std::process::id()));
+        let tmp = test_dir("path-add");
         std::fs::create_dir_all(tmp.join("d")).unwrap();
         std::fs::write(tmp.join("f"), "x").unwrap();
         let add = |p: PathBuf| run(Cmd::Path { cmd: PathCmd::Add { path: p } });
@@ -166,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn node_add_rejects_node_with_a_different_id_than_given() {
-        let dir = std::env::temp_dir().join(format!("rust-sync-node-add-{}", std::process::id()));
+        let dir = test_dir("node-add");
         let keys = net::load_or_create_keys(&dir).unwrap();
         let expected = "ab".repeat(32);
         let result = node_add_to_silent_node(&keys, Some(expected.clone()), false).await;
@@ -178,7 +179,7 @@ mod tests {
     #[tokio::test]
     async fn node_add_with_the_given_id_probes_the_node_and_trusts_it_at_its_address() {
         let _key = STATE_KEY.lock().await;
-        let dir = std::env::temp_dir().join(format!("rust-sync-node-add-ok-{}", std::process::id()));
+        let dir = test_dir("node-add-ok");
         let keys = net::load_or_create_keys(&dir).unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap().to_string();
@@ -202,7 +203,7 @@ mod tests {
 
     #[test]
     fn removal_path_of_a_deleted_path_resolves_symlinks_and_dot_dot() {
-        let tmp = std::env::temp_dir().join(format!("rust-sync-rm-path-{}", std::process::id()));
+        let tmp = test_dir("rm-path");
         std::fs::create_dir_all(tmp.join("real")).unwrap();
         let _ = std::fs::remove_file(tmp.join("link"));
         std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();

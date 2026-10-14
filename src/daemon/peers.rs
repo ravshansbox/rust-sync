@@ -1,3 +1,5 @@
+//! Connecting to trusted nodes, tracking connected peers and redialling with backoff.
+
 use super::batch::{batches, config_batches};
 use super::conn::dial;
 use super::{Daemon, Event};

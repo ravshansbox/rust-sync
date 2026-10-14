@@ -1,3 +1,5 @@
+//! Reacting to config changes and answering control socket requests.
+
 use super::batch::config_batches;
 use super::text::{nodes_text, status_text};
 use super::Daemon;

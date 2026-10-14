@@ -1,3 +1,5 @@
+//! Receiving files from peers into temporary files, with a queue and fallback to other holders.
+
 use super::Daemon;
 use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;

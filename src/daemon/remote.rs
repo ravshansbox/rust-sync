@@ -1,3 +1,5 @@
+//! Applying remote versions of files: installing, deleting, adopting and naming conflicts.
+
 use super::Daemon;
 use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;

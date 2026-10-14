@@ -1,3 +1,5 @@
+//! Splitting index entries and shared config into messages that fit in one frame.
+
 use crate::config::Shared;
 use crate::index::Entry;
 

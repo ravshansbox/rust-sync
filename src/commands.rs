@@ -5,12 +5,12 @@ use crate::config::Config;
 use crate::ctl::{self, Req};
 use crate::net;
 use crate::{daemon, paths, service};
-use anyhow::{Context, bail};
+use anyhow::bail;
 use std::collections::BTreeMap;
 
 mod node;
 mod path;
-use node::node_add;
+use node::{node_add, node_id};
 use path::{path_add, path_list, removal_path};
 
 pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
@@ -52,10 +52,6 @@ async fn status() -> anyhow::Result<()> {
 
 fn my_keys() -> anyhow::Result<net::Keys> {
     net::load_or_create_keys(paths::state_dir())
-}
-
-fn node_id(s: &str) -> anyhow::Result<String> {
-    net::parse_id(s).context("not a valid node ID")
 }
 
 /// Send a change to the running daemon. If none is running, edit the config file.

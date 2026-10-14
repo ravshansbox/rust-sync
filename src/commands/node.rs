@@ -1,6 +1,6 @@
 //! Adding a node after checking its ID.
 
-use super::{my_keys, node_id, send};
+use super::{my_keys, send};
 use crate::cli::NodeAdd;
 use crate::config::{self, Config};
 use crate::ctl::Req;
@@ -43,6 +43,10 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+pub(super) fn node_id(s: &str) -> anyhow::Result<String> {
+    net::parse_id(s).context("not a valid node ID")
 }
 
 /// Connect to the node at addr and return its ID and whether it trusts this node.

@@ -1,15 +1,14 @@
 use super::*;
 use super::remote::conflict_name;
 use super::peers::MAX_BACKOFF;
-use super::upload::upload;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use crate::index::{Action, Vv};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixListener;
 use tokio::time::timeout;
 
 mod conn;
+mod ctl;
+mod upload;
 
 fn meta(mtime: i64, by: u64) -> FileMeta {
     FileMeta { hash: Some([1; 32]), size: 1, mtime, mode: 0o644, vv: Vv::default(), by }
@@ -2352,100 +2351,4 @@ fn unreadable_file_is_not_recorded() {
     assert!(d.index.is_empty());
     assert!(d.outbox.is_empty());
     std::fs::remove_dir_all(&dir).unwrap();
-}
-
-#[tokio::test]
-async fn upload_sends_file_in_chunks_then_eof_or_unavailable_when_missing() {
-    let lp = test_dir("upload");
-    let data: Vec<u8> = (0..net::CHUNK + 5).map(|i| i as u8).collect();
-    std::fs::write(&lp, &data).unwrap();
-    let (tx, mut rx) = mpsc::channel(8);
-    upload(lp.clone(), None, "~/f".into(), [2; 32], tx.clone(), Arc::new(Semaphore::new(1))).await;
-    let mut got = Vec::new();
-    for (want_offset, want_len, want_eof) in [(0, net::CHUNK, false), (net::CHUNK, 5, false), (net::CHUNK + 5, 0, true)] {
-        let Some(Msg::Data { path, hash, offset, bytes, eof }) = rx.recv().await else { panic!() };
-        assert_eq!((path.as_str(), hash, offset, bytes.len(), eof), ("~/f", [2; 32], want_offset as u64, want_len, want_eof));
-        got.extend(bytes);
-    }
-    assert_eq!(got, data);
-    std::fs::remove_file(&lp).unwrap();
-    upload(lp, None, "~/f".into(), [2; 32], tx, Arc::new(Semaphore::new(1))).await;
-    assert!(matches!(rx.recv().await, Some(Msg::Unavailable { path, .. }) if path == "~/f"));
-    assert!(rx.recv().await.is_none());
-}
-
-#[tokio::test]
-async fn upload_waits_for_a_free_slot() {
-    let lp = test_dir("upload-slot");
-    std::fs::write(&lp, "x").unwrap();
-    let slots = Arc::new(Semaphore::new(0));
-    let (tx, mut rx) = mpsc::channel(8);
-    let task = tokio::spawn(upload(lp.clone(), None, "~/f".into(), [2; 32], tx, slots.clone()));
-    assert!(timeout(Duration::from_millis(100), rx.recv()).await.is_err());
-    slots.add_permits(1);
-    assert!(matches!(rx.recv().await, Some(Msg::Data { offset: 0, eof: false, .. })));
-    task.await.unwrap();
-    std::fs::remove_file(&lp).unwrap();
-}
-
-#[tokio::test]
-async fn waiting_upload_of_a_file_replaced_by_a_symlink_is_refused() {
-    let dir = test_dir("upload-swap");
-    let (root, outside) = (dir.join("s"), dir.join("secret"));
-    std::fs::create_dir_all(root.join("d")).unwrap();
-    std::fs::write(&outside, "secret").unwrap();
-    for lp in [root.join("f"), root.join("d/g")] {
-        std::fs::write(&lp, "x").unwrap();
-        let slots = Arc::new(Semaphore::new(0));
-        let (tx, mut rx) = mpsc::channel(8);
-        let task = tokio::spawn(upload(lp.clone(), Some(root.clone()), "~/f".into(), [2; 32], tx, slots.clone()));
-        tokio::task::yield_now().await;
-        if lp.ends_with("f") {
-            std::fs::remove_file(&lp).unwrap();
-            std::os::unix::fs::symlink(&outside, &lp).unwrap();
-        } else {
-            std::fs::rename(root.join("d"), dir.join("moved")).unwrap();
-            std::os::unix::fs::symlink(&dir, root.join("d")).unwrap();
-            std::fs::write(dir.join("g"), "secret").unwrap();
-        }
-        slots.add_permits(1);
-        assert!(matches!(rx.recv().await, Some(Msg::Unavailable { .. })), "{}", lp.display());
-        task.await.unwrap();
-    }
-    std::fs::remove_dir_all(&dir).unwrap();
-}
-
-#[tokio::test]
-async fn ctl_loop_passes_request_to_daemon_and_sends_back_its_reply() {
-    let sock = std::env::temp_dir().join(format!("rust-sync-ctl-{}.sock", std::process::id()));
-    let _ = std::fs::remove_file(&sock);
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    let task = tokio::spawn(ctl_loop(UnixListener::bind(&sock).unwrap(), tx));
-    let (r, mut w) = tokio::net::UnixStream::connect(&sock).await.unwrap().into_split();
-    w.write_all(b"{\"RemoveNode\":{\"id\":\"abcd\"}}\n").await.unwrap();
-    let Some(Event::Ctl(Req::RemoveNode { id }, reply)) = rx.recv().await else { panic!() };
-    assert_eq!(id, "abcd");
-    reply.send(Resp { ok: true, text: "done".into() }).unwrap();
-    let mut line = String::new();
-    BufReader::new(r).read_line(&mut line).await.unwrap();
-    assert_eq!(line, "{\"ok\":true,\"text\":\"done\"}\n");
-    task.abort();
-    std::fs::remove_file(&sock).unwrap();
-}
-
-#[tokio::test]
-async fn ctl_loop_rejects_a_request_it_cannot_read_instead_of_closing() {
-    let sock = std::env::temp_dir().join(format!("rust-sync-ctl-bad-{}.sock", std::process::id()));
-    let _ = std::fs::remove_file(&sock);
-    let (tx, _rx) = mpsc::unbounded_channel();
-    let task = tokio::spawn(ctl_loop(UnixListener::bind(&sock).unwrap(), tx));
-    let (r, mut w) = tokio::net::UnixStream::connect(&sock).await.unwrap().into_split();
-    w.write_all(b"{\"Pause\":{}}\n").await.unwrap();
-    let mut line = String::new();
-    BufReader::new(r).read_line(&mut line).await.unwrap();
-    let resp: Resp = serde_json::from_str(&line).unwrap();
-    assert!(!resp.ok);
-    assert!(resp.text.starts_with("the daemon cannot read this request"), "{}", resp.text);
-    task.abort();
-    std::fs::remove_file(&sock).unwrap();
 }

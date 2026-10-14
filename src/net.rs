@@ -28,6 +28,7 @@ pub const MAX_MSG: usize = MAX_FRAME - TAG;
 /// Give up on a handshake that has not finished within this long.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// A message sent between nodes over an encrypted connection.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Msg {
     Hello { port: u16, probe: bool, trusts_you: bool },
@@ -59,11 +60,13 @@ async fn read_frame(r: &mut (impl AsyncReadExt + Unpin)) -> std::io::Result<Vec<
     Ok(buf)
 }
 
+/// Receiving half of an encrypted connection.
 pub struct Reader {
     r: OwnedReadHalf,
     t: Arc<Mutex<TransportState>>,
 }
 
+/// Sending half of an encrypted connection.
 pub struct Writer {
     w: OwnedWriteHalf,
     t: Arc<Mutex<TransportState>>,

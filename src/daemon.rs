@@ -33,13 +33,13 @@ use download::Download;
 use peers::Peer;
 use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
+use upload::MAX_UPLOADS;
 
 const TICK: Duration = Duration::from_secs(30);
 /// Wait this long before accepting again after a failed accept.
 const ACCEPT_RETRY: Duration = Duration::from_secs(1);
 /// Full rescan every this many ticks (15 minutes), in case the watcher missed something.
 const RESCAN_TICKS: u64 = 30;
-const MAX_UPLOADS: usize = 8;
 
 enum Event {
     Fs(Vec<PathBuf>),

@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Semaphore, mpsc};
 
+pub(super) const MAX_UPLOADS: usize = 8;
+
 impl Daemon {
     pub(super) fn on_request(&self, from: &str, path: String, hash: [u8; 32]) {
         let Some(peer) = self.peers.get(from) else { return };

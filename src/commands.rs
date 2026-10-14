@@ -16,16 +16,9 @@ use path::{path_add, removal_path};
 pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Daemon { port, log_file } => daemon::run(port, log_file).await,
-        Cmd::Id => {
-            outln!("{}", net::pretty_id(&my_keys()?.id()));
-            Ok(())
-        }
+        Cmd::Id => id(),
         Cmd::Path { cmd: PathCmd::Add { path } } => path_add(path).await,
-        Cmd::Path { cmd: PathCmd::List } => {
-            // The daemon saves every change to the config file, so this is current either way.
-            out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
-            Ok(())
-        }
+        Cmd::Path { cmd: PathCmd::List } => path_list(),
         Cmd::Path { cmd: PathCmd::Remove { path } } => {
             send(Req::RemovePath { path: removal_path(path)? }).await
         }
@@ -41,6 +34,17 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Service { cmd: ServiceCmd::Restart } => service::restart().await,
         Cmd::Status => status().await,
     }
+}
+
+fn id() -> anyhow::Result<()> {
+    outln!("{}", net::pretty_id(&my_keys()?.id()));
+    Ok(())
+}
+
+fn path_list() -> anyhow::Result<()> {
+    // The daemon saves every change to the config file, so this is current either way.
+    out!("{}", daemon::paths_text(&Config::load(&paths::config_file())?));
+    Ok(())
 }
 
 async fn status() -> anyhow::Result<()> {

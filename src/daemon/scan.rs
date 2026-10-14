@@ -90,7 +90,7 @@ impl Daemon {
     }
 
     /// Check every regular file under `dir` and add its path to `seen`. Skips ignored names and the state folder.
-    pub(super) fn walk(&mut self, dir: &Path, seen: &mut HashSet<String>) {
+    fn walk(&mut self, dir: &Path, seen: &mut HashSet<String>) {
         let Ok(rd) = std::fs::read_dir(dir) else { return };
         for e in rd.flatten() {
             let Ok(ft) = e.file_type() else { continue };

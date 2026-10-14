@@ -35,7 +35,7 @@ pub(super) fn loaded(mode: Mode) -> anyhow::Result<bool> {
 }
 
 /// Unload the job and wait until the daemon has exited.
-pub(super) fn unload(mode: Mode) -> anyhow::Result<()> {
+fn unload(mode: Mode) -> anyhow::Result<()> {
     // Fails harmlessly if the job is not loaded.
     let _ = mode.launchctl(&["bootout", &mode.target()?]);
     for _ in 0..POLL_TRIES {

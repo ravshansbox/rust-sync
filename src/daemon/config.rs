@@ -27,7 +27,7 @@ impl Daemon {
         }
     }
 
-    pub(super) fn config_changed(&mut self, before: &HashSet<(String, bool)>) {
+    fn config_changed(&mut self, before: &HashSet<(String, bool)>) {
         if let Err(e) = self.cfg.save(&self.config_file) {
             log!("cannot save config: {e}");
         }

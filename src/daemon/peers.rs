@@ -96,7 +96,7 @@ impl Daemon {
         }
     }
 
-    pub(super) fn add_pending(&mut self, id: String, addr: String) {
+    fn add_pending(&mut self, id: String, addr: String) {
         self.pending_order.retain(|x| *x != id);
         self.pending_order.push_back(id.clone());
         self.pending.insert(id, addr);
@@ -135,7 +135,7 @@ impl Daemon {
         tokio::spawn(dial(n.addr.clone(), id.to_string(), quiet, self.keys.clone(), self.tx.clone(), self.cfg.port));
     }
 
-    pub(super) fn redial_after(&mut self, id: String, wait: Duration) {
+    fn redial_after(&mut self, id: String, wait: Duration) {
         self.backoff.insert(id.clone(), wait);
         let tx = self.tx.clone();
         tokio::spawn(async move {

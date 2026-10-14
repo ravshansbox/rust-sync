@@ -107,7 +107,7 @@ impl Daemon {
     }
 
     /// Same content on both sides: keep our file, take the combined version history.
-    pub(super) fn adopt(&mut self, p: &str, lp: &Path, local: Option<FileMeta>, r: FileMeta) {
+    fn adopt(&mut self, p: &str, lp: &Path, local: Option<FileMeta>, r: FileMeta) {
         let mut meta = r;
         if let Some(l) = local {
             meta.vv = l.vv.merged(&meta.vv);

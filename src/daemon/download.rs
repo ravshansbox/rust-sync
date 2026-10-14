@@ -3,6 +3,7 @@ use crate::index::{self, Action, Entry, FileMeta};
 use crate::log::log;
 use crate::net::Msg;
 use crate::paths;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -35,11 +36,7 @@ impl Daemon {
         let Some(peer) = self.peers.get(from) else { return };
         let Some(lp) = paths::to_local(p) else { return };
         let (Some(parent), Some(name)) = (lp.parent(), lp.file_name()) else { return };
-        let mut tmp_name = format!(".{}.rsync-tmp", name.to_string_lossy());
-        if tmp_name.len() > 255 {
-            tmp_name = format!(".{}.rsync-tmp", blake3::hash(name.as_encoded_bytes()).to_hex());
-        }
-        let tmp = parent.join(tmp_name);
+        let tmp = parent.join(tmp_name(name));
         let file = match std::fs::create_dir_all(parent).and_then(|()| File::create(&tmp)) {
             Ok(f) => f,
             Err(e) => return log!("cannot create {}: {e}", tmp.display()),
@@ -161,4 +158,12 @@ fn add_alt(alts: &mut Vec<String>, holder: &str, held: &FileMeta, from: &str, r:
     if holder != from && held.hash == r.hash && !alts.iter().any(|a| a == from) {
         alts.push(from.to_string());
     }
+}
+
+fn tmp_name(name: &OsStr) -> String {
+    let mut tmp = format!(".{}.rsync-tmp", name.to_string_lossy());
+    if tmp.len() > 255 {
+        tmp = format!(".{}.rsync-tmp", blake3::hash(name.as_encoded_bytes()).to_hex());
+    }
+    tmp
 }

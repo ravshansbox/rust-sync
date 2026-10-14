@@ -11,9 +11,11 @@ use std::path::Path;
 /// Listen on this port, and dial it when a peer address has no port.
 pub const DEFAULT_PORT: u16 = 21987;
 
+/// When an entry was last changed: a clock value and the ID of the node that changed it. Higher stamps win.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Stamp(pub u64, pub String);
 
+/// A node in the shared list: its address and whether it was removed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NodeEntry {
     pub addr: String,
@@ -21,6 +23,7 @@ pub struct NodeEntry {
     pub stamp: Stamp,
 }
 
+/// A synced folder or file in the shared list, and whether it was removed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RootEntry {
     pub is_dir: bool,
@@ -28,12 +31,14 @@ pub struct RootEntry {
     pub stamp: Stamp,
 }
 
+/// The node and root lists that peers exchange and merge.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Shared {
     pub nodes: BTreeMap<String, NodeEntry>,
     pub roots: BTreeMap<String, RootEntry>,
 }
 
+/// This node's saved settings: its port, its clock and the shared lists.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Config {
     pub port: u16,

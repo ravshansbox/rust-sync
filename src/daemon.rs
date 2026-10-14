@@ -258,7 +258,9 @@ impl Daemon {
                     self.peers.remove(&id);
                     self.drop_downloads_from(&id);
                     log!("disconnected from {}", net::pretty_id(&id));
-                    self.redial_after(id, Duration::from_secs(1));
+                    if !self.dialling.contains(&id) {
+                        self.redial_after(id, Duration::from_secs(1));
+                    }
                 }
             }
             Event::DialDone { id } => {
@@ -1505,6 +1507,23 @@ mod tests {
         assert!(timeout(Duration::from_millis(900), rx.recv()).await.is_err());
         let ev = timeout(Duration::from_millis(500), rx.recv()).await.unwrap();
         assert!(matches!(ev, Some(Event::Redial { id }) if id == "aa"));
+    }
+
+    #[tokio::test]
+    async fn dialled_node_that_goes_down_is_redialled_once_after_a_second() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        d.dialling.insert("aa".into());
+        let _rx = up(&mut d, "aa", 1);
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        d.tx = tx;
+        d.handle(Event::Down { id: "aa".into(), conn: 1 });
+        d.handle(Event::DialDone { id: "aa".into() });
+        assert!(timeout(Duration::from_millis(900), rx.recv()).await.is_err());
+        let ev = timeout(Duration::from_millis(500), rx.recv()).await.unwrap();
+        assert!(matches!(ev, Some(Event::Redial { id }) if id == "aa"));
+        assert!(timeout(Duration::from_millis(1000), rx.recv()).await.is_err());
     }
 
     #[tokio::test]

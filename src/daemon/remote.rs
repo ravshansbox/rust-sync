@@ -24,7 +24,7 @@ impl Daemon {
     }
 
     /// Act on a remote version of `p`. `tmp` holds its content once downloaded.
-    pub(super) fn apply(&mut self, from: &str, p: &str, lp: &Path, mut r: FileMeta, mut tmp: Option<PathBuf>) {
+    pub(super) fn apply(&mut self, from: &str, p: &str, lp: &Path, r: FileMeta, mut tmp: Option<PathBuf>) {
         let local = self.index.get(p).cloned();
         let action = index::decide(local.as_ref(), &r);
         let same_content = local.as_ref().is_some_and(|l| l.hash == r.hash);
@@ -49,44 +49,46 @@ impl Daemon {
             }
             Action::Take | Action::Conflict => match tmp.take() {
                 None => self.start_download(from, p, r),
-                Some(t) => {
-                    if std::fs::symlink_metadata(lp).is_ok_and(|m| m.is_dir()) {
-                        let _ = std::fs::remove_dir(lp);
-                    }
-                    let mut kept = None;
-                    if let (Action::Conflict, Some(l)) = (&action, &local)
-                        && !l.deleted()
-                        && lp.exists()
-                    {
-                        let copy = conflict_name(lp, l);
-                        if let Err(e) = std::fs::rename(lp, &copy) {
-                            let _ = std::fs::remove_file(&t);
-                            return log!("cannot keep conflict copy of {p}: {e}");
-                        }
-                        kept = Some(copy);
-                    }
-                    if let Err(e) = std::fs::rename(&t, lp) {
-                        let _ = std::fs::remove_file(&t);
-                        if let Some(copy) = kept {
-                            let _ = std::fs::rename(copy, lp);
-                        }
-                        return log!("cannot write {p}: {e}");
-                    }
-                    if let Some(copy) = kept {
-                        log!("conflict: kept local version of {p} as {}", copy.display());
-                    }
-                    log!("updated {p}");
-                    if let (Action::Conflict, Some(l)) = (&action, &local) {
-                        r.vv = l.vv.merged(&r.vv);
-                    }
-                    self.set_entry(p, r);
-                }
+                Some(t) => self.install(p, lp, &t, local.as_ref().filter(|_| action == Action::Conflict), r),
             },
         }
         if let Some(t) = tmp {
             let _ = std::fs::remove_file(t);
             self.remove_empty_parents(p, lp);
         }
+    }
+
+    fn install(&mut self, p: &str, lp: &Path, t: &Path, conflict: Option<&FileMeta>, mut r: FileMeta) {
+        if std::fs::symlink_metadata(lp).is_ok_and(|m| m.is_dir()) {
+            let _ = std::fs::remove_dir(lp);
+        }
+        let mut kept = None;
+        if let Some(l) = conflict
+            && !l.deleted()
+            && lp.exists()
+        {
+            let copy = conflict_name(lp, l);
+            if let Err(e) = std::fs::rename(lp, &copy) {
+                let _ = std::fs::remove_file(t);
+                return log!("cannot keep conflict copy of {p}: {e}");
+            }
+            kept = Some(copy);
+        }
+        if let Err(e) = std::fs::rename(t, lp) {
+            let _ = std::fs::remove_file(t);
+            if let Some(copy) = kept {
+                let _ = std::fs::rename(copy, lp);
+            }
+            return log!("cannot write {p}: {e}");
+        }
+        if let Some(copy) = kept {
+            log!("conflict: kept local version of {p} as {}", copy.display());
+        }
+        log!("updated {p}");
+        if let Some(l) = conflict {
+            r.vv = l.vv.merged(&r.vv);
+        }
+        self.set_entry(p, r);
     }
 
     pub(super) fn remove_empty_parents(&self, p: &str, lp: &Path) {

@@ -22,6 +22,8 @@ const TAG: usize = 16;
 pub const CHUNK: usize = 32 * 1024;
 /// Largest serialised message we allow.
 pub const MAX_MSG: usize = MAX_FRAME - TAG;
+/// Give up on a handshake that has not finished within this long.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Msg {
@@ -91,7 +93,7 @@ pub async fn handshake(
     keys: &Keys,
     initiator: bool,
 ) -> anyhow::Result<(Reader, Writer, String)> {
-    tokio::time::timeout(Duration::from_secs(10), handshake_inner(stream, keys, initiator))
+    tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake_inner(stream, keys, initiator))
         .await
         .context("handshake timed out")?
 }

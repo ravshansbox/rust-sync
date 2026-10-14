@@ -344,6 +344,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn path_add_saves_canonical_path_and_whether_it_is_a_folder() {
+        let _key = STATE_KEY.lock().await;
+        let tmp = std::env::temp_dir().join(format!("rust-sync-path-add-{}", std::process::id()));
+        std::fs::create_dir_all(tmp.join("d")).unwrap();
+        std::fs::write(tmp.join("f"), "x").unwrap();
+        let add = |p: PathBuf| run(Cmd::Path { cmd: PathCmd::Add { path: p } });
+        add(tmp.join("d/../f")).await.unwrap();
+        add(tmp.join("d")).await.unwrap();
+        let cfg = Config::load(&paths::config_file()).unwrap();
+        let real = tmp.canonicalize().unwrap();
+        assert!(!cfg.active_root(&paths::to_portable(&real.join("f")).unwrap()).unwrap().is_dir);
+        assert!(cfg.active_root(&paths::to_portable(&real.join("d")).unwrap()).unwrap().is_dir);
+        std::fs::remove_file(paths::config_file()).unwrap();
+        std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[tokio::test]
     async fn path_remove_accepts_paths_that_no_longer_exist() {
         let remove = |p: &str| run(Cmd::Path { cmd: PathCmd::Remove { path: PathBuf::from(p) } });
         assert_eq!(remove("/no/such/path").await.unwrap_err().to_string(), "/no/such/path is not synced");

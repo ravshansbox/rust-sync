@@ -17,6 +17,8 @@ const IDLE_LIMIT: Duration = Duration::from_secs(95);
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
 const DIAL_TIMEOUT: Duration = Duration::from_secs(10);
+/// Drop a connection whose peer does not send its hello within this long.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 
 static NEXT_CONN: AtomicU64 = AtomicU64::new(1);
 
@@ -134,7 +136,7 @@ pub(super) async fn connection_inner(
         rx.await.ok()
     };
     let hello = |trusts_you| Msg::Hello { port, probe: false, trusts_you };
-    let recv_hello = async |r: &mut net::Reader| match timeout(Duration::from_secs(10), r.recv()).await?? {
+    let recv_hello = async |r: &mut net::Reader| match timeout(HELLO_TIMEOUT, r.recv()).await?? {
         Msg::Hello { port, probe, trusts_you } => anyhow::Ok((port, probe, trusts_you)),
         _ => bail!("expected hello"),
     };

@@ -1,4 +1,4 @@
-use super::Event;
+use super::{Event, TICK};
 use crate::ctl::Resp;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -68,6 +68,23 @@ pub(super) async fn ctl_loop(l: UnixListener, tx: mpsc::UnboundedSender<Event>) 
             anyhow::Ok(())
         });
     }
+}
+
+/// Send a tick every `TICK`, starting one `TICK` from now.
+pub(super) async fn tick_loop(tx: mpsc::UnboundedSender<Event>) {
+    let mut iv = tokio::time::interval(TICK);
+    iv.tick().await;
+    while tx.send(Event::Tick).is_ok() {
+        iv.tick().await;
+    }
+}
+
+/// Ask the daemon to stop on Ctrl-C or SIGTERM.
+pub(super) async fn shutdown_on_signal(tx: mpsc::UnboundedSender<Event>) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut term = signal(SignalKind::terminate()).expect("signal handler");
+    tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
+    let _ = tx.send(Event::Shutdown);
 }
 
 #[cfg(test)]

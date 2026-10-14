@@ -32,7 +32,7 @@ mod upload;
 
 use batch::batches;
 use conn::accept_loop;
-use tasks::{ctl_loop, debounce};
+use tasks::{ctl_loop, debounce, shutdown_on_signal, tick_loop};
 pub use text::{nodes_text, paths_text, status_text};
 
 const TICK: Duration = Duration::from_secs(30);
@@ -159,21 +159,8 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600))?;
     tokio::spawn(ctl_loop(ctl_listener, tx.clone()));
 
-    let t = tx.clone();
-    tokio::spawn(async move {
-        let mut iv = tokio::time::interval(TICK);
-        iv.tick().await;
-        while t.send(Event::Tick).is_ok() {
-            iv.tick().await;
-        }
-    });
-    let t = tx.clone();
-    tokio::spawn(async move {
-        use tokio::signal::unix::{SignalKind, signal};
-        let mut term = signal(SignalKind::terminate()).expect("signal handler");
-        tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
-        let _ = t.send(Event::Shutdown);
-    });
+    tokio::spawn(tick_loop(tx.clone()));
+    tokio::spawn(shutdown_on_signal(tx.clone()));
 
     let me = keys.id();
     let mut d = Daemon {

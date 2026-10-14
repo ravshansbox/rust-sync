@@ -18,7 +18,7 @@ const SETTLE: Duration = Duration::from_millis(500);
 const SETTLE_MAX: Duration = Duration::from_secs(3);
 
 /// Collect watcher events until things go quiet, then pass them on as one batch.
-pub(super) async fn debounce(mut rx: mpsc::UnboundedReceiver<Option<PathBuf>>, tx: mpsc::UnboundedSender<Event>) {
+async fn debounce(mut rx: mpsc::UnboundedReceiver<Option<PathBuf>>, tx: mpsc::UnboundedSender<Event>) {
     while let Some(first) = rx.recv().await {
         let (mut paths, mut rescan) = (HashSet::new(), false);
         let mut add = |p: Option<PathBuf>| match p {

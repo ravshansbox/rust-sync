@@ -340,7 +340,10 @@ impl Daemon {
     }
 
     fn dial(&mut self, id: &str) {
-        let Some(n) = self.cfg.trusted(id) else { return };
+        let Some(n) = self.cfg.trusted(id) else {
+            self.backoff.remove(id);
+            return;
+        };
         if self.peers.contains_key(id) || self.dialling.contains(id) {
             return;
         }
@@ -1408,6 +1411,21 @@ mod tests {
         assert_eq!(d.dialling, HashSet::from(["cc".to_string()]));
         d.handle(Event::Redial { id: "bb".into() });
         assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
+    }
+
+    #[tokio::test]
+    async fn node_removed_while_waiting_to_retry_is_dialled_when_a_peer_trusts_it_again() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_node(&me, "aa", "127.0.0.1:1", false);
+        d.backoff.insert("aa".into(), Duration::from_secs(8));
+        assert!(d.on_ctl(&Req::RemoveNode { id: "aa".into() }).ok);
+        d.handle(Event::Redial { id: "aa".into() });
+        let mut theirs = Config { clock: d.cfg.clock, ..Config::default() };
+        theirs.set_node("bb", "aa", "127.0.0.1:1", false);
+        d.on_config(&theirs.shared);
+        assert!(d.cfg.trusted("aa").is_some());
+        assert_eq!(d.dialling, HashSet::from(["aa".to_string()]));
     }
 
     #[tokio::test]

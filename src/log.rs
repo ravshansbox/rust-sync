@@ -13,6 +13,7 @@ use time::timestamp;
 /// Rotate the log file once a write would take it past this many bytes.
 const MAX_SIZE: u64 = 1024 * 1024;
 
+/// The open log file, with its path for rotation and its current size in bytes.
 struct LogFile {
     path: PathBuf,
     file: File,

@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+/// The home folder from `HOME`, with symlinks resolved. Panics if `HOME` is not set.
 pub fn home() -> &'static Path {
     static HOME: OnceLock<PathBuf> = OnceLock::new();
     HOME.get_or_init(|| {
@@ -14,6 +15,7 @@ pub fn home() -> &'static Path {
     })
 }
 
+/// Our state folder: `RUST_SYNC_HOME` if set, otherwise `~/.rust-sync`. Tests use a temporary folder.
 pub fn state_dir() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
@@ -42,10 +44,12 @@ pub fn resolve_parent(dir: PathBuf) -> PathBuf {
     dir
 }
 
+/// Path of the config file in the state folder.
 pub fn config_file() -> PathBuf {
     state_dir().join("config.json")
 }
 
+/// Path of the index file in the state folder.
 pub fn index_file() -> PathBuf {
     state_dir().join("index.bin")
 }
@@ -80,6 +84,7 @@ pub fn to_local(portable: &str) -> Option<PathBuf> {
     Some(p)
 }
 
+/// True if `p` or a folder above it is the same file as `dir`, such as a path in a different letter case or through a symlink.
 fn is_under_in_another_spelling(p: &Path, dir: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     let Ok(d) = std::fs::metadata(dir) else { return false };
@@ -115,6 +120,7 @@ pub fn ignored(name: &str) -> bool {
     name.ends_with(".rsync-tmp") || name == ".DS_Store"
 }
 
+/// A temporary folder for a test, unique to this process.
 #[cfg(test)]
 pub fn test_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))

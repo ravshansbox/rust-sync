@@ -15,6 +15,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
+mod keys;
+
+pub use keys::{Keys, hex, load_or_create_keys, parse_id, pretty_id, short_id};
+
 /// Noise protocol pattern and ciphers used for every connection.
 const PARAMS: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
 /// Largest Noise frame, the most a 2-byte length can describe.
@@ -46,10 +50,6 @@ pub enum Msg {
     /// Keeps the connection alive, so a dead peer is noticed.
     Ping,
 }
-
-mod keys;
-
-pub use keys::{Keys, hex, load_or_create_keys, parse_id, pretty_id, short_id};
 
 /// Write one frame: a 2-byte big-endian length, then the bytes.
 async fn write_frame(w: &mut (impl AsyncWriteExt + Unpin), buf: &[u8]) -> std::io::Result<()> {

@@ -921,7 +921,7 @@ pub fn paths_text(cfg: &Config) -> String {
     if roots.is_empty() {
         return "  (none) add one with `rust-sync path add <path>`\n".into();
     }
-    roots.into_iter().map(|(p, r)| format!("  {p}{}\n", if r.is_dir { "/" } else { "" })).collect()
+    roots.into_iter().map(|(p, r)| format!("  {p}{}\n", if r.is_dir && !p.ends_with('/') { "/" } else { "" })).collect()
 }
 
 /// Trusted nodes with their address and connection state, then untrusted nodes
@@ -3643,6 +3643,13 @@ mod tests {
         cfg.set_root("me", "~/gone", true, true);
         cfg.set_root("me", "~/notes.md", false, false);
         assert_eq!(paths_text(&cfg), "  ~/docs/\n  ~/notes.md\n");
+    }
+
+    #[test]
+    fn paths_text_does_not_add_a_second_slash_to_the_root_folder() {
+        let mut cfg = Config::default();
+        cfg.set_root("me", "/", true, false);
+        assert_eq!(paths_text(&cfg), "  /\n");
     }
 
     #[test]

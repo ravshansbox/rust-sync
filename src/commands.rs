@@ -70,13 +70,14 @@ async fn send(req: Req) -> anyhow::Result<()> {
     let me = my_keys()?.id();
     let path = paths::config_file();
     let mut cfg = Config::load(&path)?;
+    let none = BTreeMap::default();
     match req {
         Req::Status => {
-            out!("{}", daemon::status_text(&cfg, &me, |_| None, &BTreeMap::default()));
+            out!("{}", daemon::status_text(&cfg, &me, |_| None, &none));
             return Ok(());
         }
         Req::ListNodes => {
-            out!("{}", daemon::nodes_text(&cfg, |_| None, &BTreeMap::default()));
+            out!("{}", daemon::nodes_text(&cfg, |_| None, &none));
             outln!("\n(The daemon is not running, so connection state is unknown.)");
             return Ok(());
         }

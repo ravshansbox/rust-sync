@@ -7,6 +7,8 @@ use crate::net::{self, Msg};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// First wait before redialling a node that dropped or could not be reached.
+const MIN_BACKOFF: Duration = Duration::from_secs(1);
 /// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
 pub(super) const MAX_BACKOFF: Duration = super::TICK;
 /// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
@@ -76,7 +78,7 @@ impl Daemon {
             self.drop_downloads_from(&id);
             log!("disconnected from {}", net::pretty_id(&id));
             if !self.dialling.contains(&id) {
-                self.redial_after(id, Duration::from_secs(1));
+                self.redial_after(id, MIN_BACKOFF);
             }
         }
     }
@@ -84,7 +86,7 @@ impl Daemon {
     pub(super) fn dial_done(&mut self, id: String) {
         self.dialling.remove(&id);
         if !self.peers.contains_key(&id) {
-            let wait = self.backoff.get(&id).map_or(Duration::from_secs(1), |d| (*d * 2).min(MAX_BACKOFF));
+            let wait = self.backoff.get(&id).map_or(MIN_BACKOFF, |d| (*d * 2).min(MAX_BACKOFF));
             self.redial_after(id, wait);
         }
     }

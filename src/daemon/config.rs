@@ -64,7 +64,7 @@ impl Daemon {
         match req {
             Req::Status => return Resp { ok: true, text: self.status() },
             Req::ListNodes => {
-                let text = nodes_text(&self.cfg, |id| Some(self.peers.contains_key(id)), &self.pending);
+                let text = nodes_text(&self.cfg, |id| self.connected(id), &self.pending);
                 return Resp { ok: true, text };
             }
             Req::AddNode { id, .. } => {
@@ -81,8 +81,12 @@ impl Daemon {
         Resp { ok: true, text }
     }
 
+    fn connected(&self, id: &str) -> Option<bool> {
+        Some(self.peers.contains_key(id))
+    }
+
     pub(super) fn status(&self) -> String {
-        let s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
+        let s = status_text(&self.cfg, &self.me, |id| self.connected(id), &self.pending);
         let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.is_synced(p)).count();
         format!(
             "{s}\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",

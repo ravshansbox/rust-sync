@@ -38,6 +38,7 @@ const MAX_UPLOADS: usize = 8;
 /// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
 /// connection attempts can't grow the list without end.
 const MAX_PENDING: usize = 20;
+const BATCH_LIMIT: usize = 40_000;
 /// Happy Eyeballs (RFC 8305): start the next address after this long, without
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
@@ -946,11 +947,10 @@ fn conflict_name(lp: &Path, loser: &FileMeta) -> PathBuf {
 
 /// Split entries into messages that fit in one frame.
 fn batches(entries: Vec<Entry>) -> Vec<Vec<Entry>> {
-    const LIMIT: usize = 40_000;
     let (mut out, mut cur, mut size) = (Vec::new(), Vec::new(), 0);
     for e in entries {
         let s = e.path.len() + 100 + e.meta.vv.0.len() * 20;
-        if size + s > LIMIT && !cur.is_empty() {
+        if size + s > BATCH_LIMIT && !cur.is_empty() {
             out.push(std::mem::take(&mut cur));
             size = 0;
         }
@@ -965,11 +965,10 @@ fn batches(entries: Vec<Entry>) -> Vec<Vec<Entry>> {
 
 /// Split the shared config into parts that each fit in one message.
 fn config_batches(shared: &Shared) -> Vec<Shared> {
-    const LIMIT: usize = 40_000;
     let mut out = vec![Shared::default()];
     let mut size = 0;
     let mut add = |s: usize, put: &mut dyn FnMut(&mut Shared)| {
-        if size + s > LIMIT && out.last().is_some_and(|c| !c.nodes.is_empty() || !c.roots.is_empty()) {
+        if size + s > BATCH_LIMIT && out.last().is_some_and(|c| !c.nodes.is_empty() || !c.roots.is_empty()) {
             out.push(Shared::default());
             size = 0;
         }

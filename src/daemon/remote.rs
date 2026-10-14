@@ -43,8 +43,7 @@ impl Daemon {
             },
         }
         if let Some(t) = tmp {
-            let _ = std::fs::remove_file(t);
-            self.remove_empty_parents(p, lp);
+            self.discard_tmp(p, &t);
         }
     }
 

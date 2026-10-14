@@ -174,7 +174,7 @@ impl Daemon {
         }
     }
 
-    fn discard_tmp(&self, p: &str, tmp: &Path) {
+    pub(super) fn discard_tmp(&self, p: &str, tmp: &Path) {
         let _ = std::fs::remove_file(tmp);
         self.remove_empty_parents(p, tmp);
     }

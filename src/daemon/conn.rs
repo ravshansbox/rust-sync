@@ -153,7 +153,11 @@ pub(super) async fn connection_inner(
         log!("node {} does not trust this node yet", net::pretty_id(&id));
         return Ok(());
     }
+    serve(r, w, id, outbound, &tx).await
+}
 
+/// Pass messages both ways for an authenticated connection until either side stops.
+async fn serve(mut r: net::Reader, mut w: net::Writer, id: String, outbound: bool, tx: &mpsc::UnboundedSender<Event>) -> anyhow::Result<()> {
     let conn = NEXT_CONN.fetch_add(1, Ordering::Relaxed);
     let (ctl_tx, mut ctl_rx) = mpsc::unbounded_channel();
     let (data_tx, mut data_rx) = mpsc::channel(8);

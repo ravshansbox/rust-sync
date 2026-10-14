@@ -57,15 +57,8 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     if mode == Mode::System || Mode::System.plist().exists() {
         sudo_login()?;
     }
-    for old in [Mode::Agent, Mode::System] {
-        if old.plist().exists() {
-            // Replace the old launcher, so a new binary path or setting takes effect.
-            unload(old)?;
-            if old != mode {
-                remove_plist(old)?;
-            }
-        }
-    }
+    // Replace the old launcher, so a new binary path or setting takes effect.
+    unload_installed(Some(mode))?;
     if running().await? {
         bail!("a daemon is already running. Stop it first (Ctrl-C where it runs), then run this again.");
     }
@@ -101,16 +94,24 @@ pub fn uninstall() -> anyhow::Result<()> {
     if Mode::System.plist().exists() {
         sudo_login()?;
     }
-    for old in [Mode::Agent, Mode::System] {
-        if old.plist().exists() {
-            unload(old)?;
-            remove_plist(old)?;
-        }
-    }
+    unload_installed(None)?;
     outln!(
         "Uninstalled. rust-sync no longer starts at {}. Your config and synced files are unchanged.",
         mode.when()
     );
+    Ok(())
+}
+
+/// Unload every installed launcher and remove its plist, except the plist of `keep`.
+fn unload_installed(keep: Option<Mode>) -> anyhow::Result<()> {
+    for old in [Mode::Agent, Mode::System] {
+        if old.plist().exists() {
+            unload(old)?;
+            if Some(old) != keep {
+                remove_plist(old)?;
+            }
+        }
+    }
     Ok(())
 }
 

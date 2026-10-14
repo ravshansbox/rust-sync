@@ -19,7 +19,9 @@ pub(super) const MAX_PENDING: usize = 20;
 
 /// A connected, trusted peer and the channels for sending to it.
 pub(super) struct Peer {
+    /// Unique number for this connection, so events from an older connection to the same node are ignored.
     pub(super) conn: u64,
+    /// True if we dialled the peer, false if it dialled us.
     pub(super) outbound: bool,
     /// Small messages: config, index, requests.
     pub(super) ctl: mpsc::UnboundedSender<Msg>,

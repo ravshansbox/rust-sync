@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 impl Daemon {
+    /// Make the file watcher match the active synced paths. Watches folders recursively and the parent folder of each file, and stops watching anything else.
     pub(super) fn reconcile_watches(&mut self) {
         let mut want: HashMap<PathBuf, RecursiveMode> = HashMap::new();
         for (root, e) in self.cfg.active_roots() {
@@ -37,12 +38,14 @@ impl Daemon {
         }
     }
 
+    /// Compare every active synced path on disk with the index.
     pub(super) fn rescan_all(&mut self) {
         for (r, _) in self.active_roots() {
             self.check_tree(&r);
         }
     }
 
+    /// Handle a file watcher event for `lp`. Skips ignored names, paths outside synced paths and paths reached through a symlink.
     pub(super) fn on_fs(&mut self, lp: &Path) {
         if lp.file_name().and_then(|n| n.to_str()).is_some_and(paths::ignored) {
             return;
@@ -69,6 +72,7 @@ impl Daemon {
         self.check_missing(p, &seen);
     }
 
+    /// Check index entries under `p` that are not in `seen`, so files gone from disk are recorded as deleted.
     fn check_missing(&mut self, p: &str, seen: &HashSet<String>) {
         let missing: Vec<String> = index::under(&self.index, p)
             .filter(|(k, _)| !seen.contains(*k))
@@ -85,6 +89,7 @@ impl Daemon {
         }
     }
 
+    /// Check every regular file under `dir` and add its path to `seen`. Skips ignored names and the state folder.
     pub(super) fn walk(&mut self, dir: &Path, seen: &mut HashSet<String>) {
         let Ok(rd) = std::fs::read_dir(dir) else { return };
         for e in rd.flatten() {
@@ -108,15 +113,18 @@ impl Daemon {
         }
     }
 
+    /// Whether `p` is inside a synced path and can be synced as a file.
     pub(super) fn is_synced(&self, p: &str) -> bool {
         self.cfg.root_of(p).is_some() && !self.not_a_synced_file(p)
     }
 
+    /// Whether `p` cannot be synced as a file: it is a synced folder, or it is under a synced file.
     pub(super) fn not_a_synced_file(&self, p: &str) -> bool {
         self.cfg.active_root(p).is_some_and(|r| r.is_dir)
             || self.cfg.active_roots().any(|(r, re)| !re.is_dir && r != p && paths::is_under(p, r))
     }
 
+    /// The local path of the synced path that contains `p`.
     pub(super) fn local_root(&self, p: &str) -> Option<PathBuf> {
         self.cfg.root_of(p).and_then(paths::to_local)
     }
@@ -126,6 +134,7 @@ impl Daemon {
         self.check_stat(p, lp, index::stat(lp));
     }
 
+    /// Like `check_file`, but uses `st` as the state on disk. `None` means the file is missing.
     pub(super) fn check_stat(&mut self, p: &str, lp: &Path, st: Option<index::Stat>) {
         let old = self.index.get(p).cloned();
         let me = self.me_short;

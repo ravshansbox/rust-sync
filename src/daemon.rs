@@ -42,6 +42,7 @@ const ACCEPT_RETRY: Duration = Duration::from_secs(1);
 /// Full rescan every this many ticks (15 minutes), in case the watcher missed something.
 const RESCAN_TICKS: u64 = 30;
 
+/// Something for the daemon's event loop to handle, sent by the watcher, timers, connections and the control socket.
 enum Event {
     Fs(Vec<PathBuf>),
     Rescan,
@@ -57,6 +58,7 @@ enum Event {
     Shutdown,
 }
 
+/// The running daemon's state, owned by the event loop.
 struct Daemon {
     me: String,
     me_short: u64,

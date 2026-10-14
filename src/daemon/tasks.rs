@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixListener;
+use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 
@@ -65,30 +65,31 @@ pub(super) async fn ctl_loop(l: UnixListener, tx: mpsc::UnboundedSender<Event>) 
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         };
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let (r, mut w) = s.into_split();
-            let mut line = String::new();
-            BufReader::new(r).read_line(&mut line).await?;
-            let resp = match serde_json::from_str(&line) {
-                Ok(req) => {
-                    let (reply, rx) = oneshot::channel();
-                    tx.send(Event::Ctl(req, reply))?;
-                    rx.await?
-                }
-                Err(e) => Resp {
-                    ok: false,
-                    text: format!(
-                        "the daemon cannot read this request ({e}). Is it running a different version? Try `rust-sync service restart`."
-                    ),
-                },
-            };
-            let mut out = serde_json::to_string(&resp)?;
-            out.push('\n');
-            w.write_all(out.as_bytes()).await?;
-            anyhow::Ok(())
-        });
+        tokio::spawn(ctl_conn(s, tx.clone()));
     }
+}
+
+async fn ctl_conn(s: UnixStream, tx: mpsc::UnboundedSender<Event>) -> anyhow::Result<()> {
+    let (r, mut w) = s.into_split();
+    let mut line = String::new();
+    BufReader::new(r).read_line(&mut line).await?;
+    let resp = match serde_json::from_str(&line) {
+        Ok(req) => {
+            let (reply, rx) = oneshot::channel();
+            tx.send(Event::Ctl(req, reply))?;
+            rx.await?
+        }
+        Err(e) => Resp {
+            ok: false,
+            text: format!(
+                "the daemon cannot read this request ({e}). Is it running a different version? Try `rust-sync service restart`."
+            ),
+        },
+    };
+    let mut out = serde_json::to_string(&resp)?;
+    out.push('\n');
+    w.write_all(out.as_bytes()).await?;
+    Ok(())
 }
 
 /// Send a tick every `TICK`, starting one `TICK` from now.

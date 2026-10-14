@@ -116,11 +116,16 @@ pub fn ignored(name: &str) -> bool {
 }
 
 #[cfg(test)]
+pub fn test_dir(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn real_and_link(name: &str) -> PathBuf {
-        let tmp = std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()));
+        let tmp = test_dir(name);
         std::fs::create_dir_all(tmp.join("real")).unwrap();
         let _ = std::fs::remove_file(tmp.join("link"));
         std::os::unix::fs::symlink(tmp.join("real"), tmp.join("link")).unwrap();

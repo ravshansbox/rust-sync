@@ -2,6 +2,7 @@ use super::*;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use crate::index::Vv;
+use crate::paths::test_dir;
 use tokio::time::timeout;
 
 mod apply;
@@ -21,10 +22,6 @@ fn meta(mtime: i64, by: u64) -> FileMeta {
 fn download(from: &str, meta: FileMeta, tmp: &Path) -> Download {
     let file = File::create(tmp).unwrap();
     Download { from: from.into(), meta, tmp: tmp.to_path_buf(), file, hasher: blake3::Hasher::new(), written: 0, alts: Vec::new() }
-}
-
-fn test_dir(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
 }
 
 fn up(d: &mut Daemon, id: &str, conn: u64) -> mpsc::UnboundedReceiver<Msg> {

@@ -38,9 +38,7 @@ pub fn hash_file(p: &Path) -> std::io::Result<([u8; 32], u64)> {
 mod tests {
     use super::*;
 
-    fn test_dir(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
-    }
+    use crate::paths::test_dir;
 
     #[test]
     fn nanos_is_signed_offset_from_unix_epoch() {

@@ -147,9 +147,7 @@ fn remote_wins(l: &FileMeta, r: &FileMeta) -> bool {
 mod tests {
     use super::*;
 
-    fn test_dir(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
-    }
+    use crate::paths::test_dir;
 
     fn vv(pairs: &[(u64, u64)]) -> Vv {
         Vv(pairs.to_vec())

@@ -138,9 +138,7 @@ pub fn with_port(addr: &str) -> String {
 mod tests {
     use super::*;
 
-    fn test_dir(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("rust-sync-{name}-{}", std::process::id()))
-    }
+    use crate::paths::test_dir;
 
     #[test]
     fn with_port_adds_default_only_when_missing() {

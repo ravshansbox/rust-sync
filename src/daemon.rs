@@ -463,7 +463,7 @@ impl Daemon {
 
     fn status(&self) -> String {
         let s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
-        let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some()).count();
+        let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some() && !self.not_a_synced_file(p)).count();
         format!(
             "{s}\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
             self.downloads.len(),
@@ -1879,6 +1879,21 @@ mod tests {
         d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0), Vec::new()));
         let text = d.on_ctl(&Req::Status).text;
         assert!(text.contains("\nFiles tracked: 2\nTransfers: 0 active, 1 queued\n"), "{text}");
+    }
+
+    #[test]
+    fn status_does_not_count_entries_left_where_nested_synced_paths_now_are() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        d.cfg.set_root(&me, "~/s", true, false);
+        d.cfg.set_root(&me, "~/s/d", true, false);
+        d.cfg.set_root(&me, "~/s/f", false, false);
+        d.index.insert("~/s/a".into(), meta(0, 0));
+        d.index.insert("~/s/d".into(), meta(0, 0));
+        d.index.insert("~/s/f".into(), meta(0, 0));
+        d.index.insert("~/s/f/x".into(), meta(0, 0));
+        let text = d.on_ctl(&Req::Status).text;
+        assert!(text.contains("\nFiles tracked: 2\n"), "{text}");
     }
 
     #[test]

@@ -149,12 +149,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
 
     let index = index::load(&index_file);
     let mut d = Daemon::new(keys, cfg, config_file, index, index_file, watcher, tx);
-    log!("rust-sync node {}", net::pretty_id(&d.me));
-    log!("listening on port {}", d.cfg.port);
-    d.reconcile_watches();
-    d.rescan_all();
-    d.outbox.clear();
-    d.dial_all();
+    d.start();
 
     d.event_loop(rx).await;
 
@@ -207,6 +202,15 @@ impl Daemon {
             index_dirty: false,
             ticks: 0,
         }
+    }
+
+    fn start(&mut self) {
+        log!("rust-sync node {}", net::pretty_id(&self.me));
+        log!("listening on port {}", self.cfg.port);
+        self.reconcile_watches();
+        self.rescan_all();
+        self.outbox.clear();
+        self.dial_all();
     }
 
     async fn event_loop(&mut self, mut rx: mpsc::UnboundedReceiver<Event>) {

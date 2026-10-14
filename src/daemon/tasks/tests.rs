@@ -23,7 +23,7 @@ async fn debounce_merges_paths_and_turns_none_into_rescan() {
 async fn debounce_sends_paths_after_the_longest_wait_even_while_changes_keep_coming() {
     let (in_tx, in_rx) = mpsc::unbounded_channel();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel();
-    drop(tokio::spawn(debounce(in_rx, out_tx)));
+    tokio::spawn(debounce(in_rx, out_tx));
     let feed = tokio::spawn(async move {
         while in_tx.send(Some(PathBuf::from("/a"))).is_ok() {
             tokio::time::sleep(SETTLE / 5).await;

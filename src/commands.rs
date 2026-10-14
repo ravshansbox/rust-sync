@@ -13,6 +13,7 @@ mod path;
 use node::{node_add, node_id};
 use path::{path_add, path_list, removal_path};
 
+/// Run one command-line command.
 pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
     match cmd {
         Cmd::Daemon { port, log_file } => daemon::run(port, log_file).await,
@@ -36,11 +37,13 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
     }
 }
 
+/// Print this node's ID.
 fn id() -> anyhow::Result<()> {
     outln!("{}", net::pretty_id(&my_keys()?.id()));
     Ok(())
 }
 
+/// Print the daemon status, then whether the service starts at login or boot.
 async fn status() -> anyhow::Result<()> {
     send(Req::Status).await?;
     match service::starts_at() {
@@ -50,6 +53,7 @@ async fn status() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Load this node's keys, creating them on first use.
 fn my_keys() -> anyhow::Result<net::Keys> {
     net::load_or_create_keys(paths::state_dir())
 }
@@ -66,6 +70,7 @@ async fn send(req: Req) -> anyhow::Result<()> {
     send_offline(req)
 }
 
+/// Handle a request without a daemon: print status or nodes from the config file, or apply a change to it.
 fn send_offline(req: Req) -> anyhow::Result<()> {
     let me = my_keys()?.id();
     let path = paths::config_file();

@@ -5,6 +5,9 @@ use anyhow::{Context, bail};
 use std::process::Command;
 use std::time::Duration;
 
+/// Pause before the second bootstrap attempt.
+const RETRY_PAUSE: Duration = Duration::from_secs(1);
+
 pub(super) fn bootstrap(mode: Mode) -> anyhow::Result<()> {
     let plist = mode.plist();
     launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])
@@ -15,7 +18,7 @@ pub(super) fn bootstrap_with_retry(mode: Mode) -> anyhow::Result<()> {
         // launchd sometimes refuses with "5: Input/output error", for example while a
         // job with the same label is still unloading. Clear it and try once more.
         unload(mode)?;
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(RETRY_PAUSE);
         bootstrap(mode)?;
     }
     Ok(())

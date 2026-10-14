@@ -420,7 +420,7 @@ impl Daemon {
         let unwanted: Vec<String> = self
             .downloads
             .keys()
-            .filter(|p| self.cfg.root_of(p).is_none() || self.not_a_synced_file(p))
+            .filter(|p| !self.is_synced(p))
             .cloned()
             .collect();
         for p in unwanted {
@@ -429,7 +429,7 @@ impl Daemon {
         let unwanted: Vec<String> = self
             .queued
             .keys()
-            .filter(|p| self.cfg.root_of(p).is_none() || self.not_a_synced_file(p))
+            .filter(|p| !self.is_synced(p))
             .cloned()
             .collect();
         for p in unwanted {
@@ -479,7 +479,7 @@ impl Daemon {
 
     fn status(&self) -> String {
         let s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
-        let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.cfg.root_of(p).is_some() && !self.not_a_synced_file(p)).count();
+        let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.is_synced(p)).count();
         format!(
             "{s}\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
             self.downloads.len(),
@@ -579,6 +579,10 @@ impl Daemon {
                 seen.insert(p);
             }
         }
+    }
+
+    fn is_synced(&self, p: &str) -> bool {
+        self.cfg.root_of(p).is_some() && !self.not_a_synced_file(p)
     }
 
     fn not_a_synced_file(&self, p: &str) -> bool {

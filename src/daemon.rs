@@ -2,7 +2,7 @@
 //! event loop on a single thread. Other tasks (network, watcher, control socket)
 //! only pass events to it.
 
-use crate::config::{Config, Shared};
+use crate::config::Config;
 use crate::ctl::{self, Req, Resp};
 use crate::index::{self, Entry, FileMeta, Index};
 use crate::net::{self, Keys, Msg};
@@ -20,6 +20,7 @@ use tokio::net::{TcpListener, UnixListener};
 use tokio::sync::{Semaphore, mpsc, oneshot};
 
 mod batch;
+mod config;
 mod download;
 mod peers;
 mod remote;
@@ -27,7 +28,7 @@ mod scan;
 mod tasks;
 mod text;
 
-use batch::{batches, config_batches};
+use batch::batches;
 use tasks::{accept_loop, ctl_loop, debounce, upload};
 pub use text::{nodes_text, paths_text, status_text};
 
@@ -309,90 +310,6 @@ impl Daemon {
                 }
             }
         }
-    }
-
-    // ---- Shared config ----
-
-    fn active_roots(&self) -> HashSet<(String, bool)> {
-        self.cfg.active_roots().map(|(r, e)| (r.clone(), e.is_dir)).collect()
-    }
-
-    fn on_config(&mut self, shared: &Shared) {
-        let before = self.active_roots();
-        if self.cfg.merge(shared, &self.me) {
-            self.config_changed(&before);
-        }
-    }
-
-    fn config_changed(&mut self, before: &HashSet<(String, bool)>) {
-        if let Err(e) = self.cfg.save(&self.config_file) {
-            log!("cannot save config: {e}");
-        }
-        let gone: Vec<String> = self.peers.extract_if(|id, _| self.cfg.trusted(id).is_none()).map(|(id, _)| id).collect();
-        for id in gone {
-            self.drop_downloads_from(&id);
-        }
-        let unwanted: Vec<String> = self
-            .downloads
-            .keys()
-            .chain(self.queued.keys())
-            .filter(|p| !self.is_synced(p))
-            .cloned()
-            .collect();
-        for p in unwanted {
-            self.cancel_download(&p);
-            self.queued.remove(&p);
-        }
-        self.reconcile_watches();
-        let after = self.active_roots();
-        for (root, _) in after.difference(before) {
-            log!("now syncing {root}");
-            self.check_tree(root);
-            // Peers may not have seen our entries for this root yet.
-            self.outbox.extend(index::under(&self.index, root).map(Entry::from));
-        }
-        for (root, _) in before.difference(&after) {
-            if self.cfg.active_root(root).is_none() && self.cfg.root_of(root).is_some() {
-                self.check_tree(root);
-                self.outbox.extend(index::under(&self.index, root).map(Entry::from));
-            }
-        }
-        for shared in config_batches(&self.cfg.shared) {
-            self.broadcast(&Msg::Config(shared));
-        }
-        self.dial_all();
-    }
-
-    fn on_ctl(&mut self, req: &Req) -> Resp {
-        let before = self.active_roots();
-        match req {
-            Req::Status => return Resp { ok: true, text: self.status() },
-            Req::ListNodes => {
-                let text = nodes_text(&self.cfg, |id| Some(self.peers.contains_key(id)), &self.pending);
-                return Resp { ok: true, text };
-            }
-            Req::AddNode { id, .. } => {
-                self.remove_pending(id);
-                self.backoff.remove(id);
-            }
-            _ => {}
-        }
-        let text = match ctl::apply(&mut self.cfg, &self.me, req) {
-            Ok(text) => text,
-            Err(text) => return Resp { ok: false, text },
-        };
-        self.config_changed(&before);
-        Resp { ok: true, text }
-    }
-
-    fn status(&self) -> String {
-        let s = status_text(&self.cfg, &self.me, |id| Some(self.peers.contains_key(id)), &self.pending);
-        let files = self.index.iter().filter(|(p, m)| !m.deleted() && self.is_synced(p)).count();
-        format!(
-            "{s}\nFiles tracked: {files}\nTransfers: {} active, {} queued\n",
-            self.downloads.len(),
-            self.queued.len()
-        )
     }
 
     fn set_entry(&mut self, p: &str, meta: FileMeta) {

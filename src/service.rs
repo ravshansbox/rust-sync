@@ -19,7 +19,7 @@ mod launchd;
 mod mode;
 mod plist;
 
-use launchd::{bootstrap, kickstart, kill, loaded, unload};
+use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload};
 use mode::{Mode, uid};
 use plist::{plist_xml, remove_plist, write_plist};
 
@@ -66,17 +66,6 @@ pub async fn install(system: bool) -> anyhow::Result<()> {
     write_plist(mode, &plist_xml(mode, &exe, std::env::var_os("RUST_SYNC_HOME").is_some())?)?;
     bootstrap_with_retry(mode)?;
     print_installed(mode, &exe);
-    Ok(())
-}
-
-fn bootstrap_with_retry(mode: Mode) -> anyhow::Result<()> {
-    if bootstrap(mode).is_err() {
-        // launchd sometimes refuses with "5: Input/output error", for example while a
-        // job with the same label is still unloading. Clear it and try once more.
-        unload(mode)?;
-        std::thread::sleep(Duration::from_secs(1));
-        bootstrap(mode)?;
-    }
     Ok(())
 }
 

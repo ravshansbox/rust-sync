@@ -9,6 +9,17 @@ pub(super) fn bootstrap(mode: Mode) -> anyhow::Result<()> {
     launchctl(mode, &["bootstrap", &mode.domain()?, plist.to_str().context("path is not valid UTF-8")?])
 }
 
+pub(super) fn bootstrap_with_retry(mode: Mode) -> anyhow::Result<()> {
+    if bootstrap(mode).is_err() {
+        // launchd sometimes refuses with "5: Input/output error", for example while a
+        // job with the same label is still unloading. Clear it and try once more.
+        unload(mode)?;
+        std::thread::sleep(Duration::from_secs(1));
+        bootstrap(mode)?;
+    }
+    Ok(())
+}
+
 /// Whether launchd has the job loaded (whether or not it is running).
 pub(super) fn loaded(mode: Mode) -> anyhow::Result<bool> {
     let out = Command::new("launchctl").args(["print", &mode.target()?]).output().context("cannot run launchctl")?;

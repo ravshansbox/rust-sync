@@ -31,6 +31,14 @@ impl Daemon {
         }
         self.drop_unwanted();
         self.reconcile_watches();
+        self.refresh_changed_roots(before);
+        for shared in config_batches(&self.cfg.shared) {
+            self.broadcast(&Msg::Config(shared));
+        }
+        self.dial_all();
+    }
+
+    fn refresh_changed_roots(&mut self, before: &HashSet<(String, bool)>) {
         let after = self.active_roots();
         for (root, _) in after.difference(before) {
             log!("now syncing {root}");
@@ -42,10 +50,6 @@ impl Daemon {
                 self.refresh_root(root);
             }
         }
-        for shared in config_batches(&self.cfg.shared) {
-            self.broadcast(&Msg::Config(shared));
-        }
-        self.dial_all();
     }
 
     fn drop_unwanted(&mut self) {

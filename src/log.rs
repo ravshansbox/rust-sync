@@ -133,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn line_rotates_file_when_next_line_would_exceed_max_size_replacing_an_older_rotated_file() {
+    fn write_rotates_file_when_next_line_would_exceed_max_size_replacing_an_older_rotated_file() {
         let dir = test_dir("line");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn line_keeps_file_when_next_line_reaches_max_size_exactly() {
+    fn write_keeps_file_when_next_line_reaches_max_size_exactly() {
         let dir = test_dir("limit");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
@@ -166,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn line_counts_written_lines_towards_max_size() {
+    fn write_counts_written_lines_towards_max_size() {
         let dir = test_dir("count");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn line_starts_a_new_file_at_max_size_when_the_log_file_was_deleted() {
+    fn write_starts_a_new_file_at_max_size_when_the_log_file_was_deleted() {
         let dir = test_dir("deleted");
         let path = dir.join("test.log");
         std::fs::create_dir_all(&dir).unwrap();

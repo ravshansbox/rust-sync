@@ -68,7 +68,7 @@ pub fn to_local(portable: &str) -> Option<PathBuf> {
         home().to_path_buf()
     } else if let Some(rest) = portable.strip_prefix("~/") {
         home().join(rest)
-    } else if portable.starts_with('/') {
+    } else if portable.starts_with('/') && !Path::new(portable).starts_with(home()) {
         PathBuf::from(portable)
     } else {
         return None;
@@ -216,6 +216,12 @@ mod tests {
         assert_eq!(to_portable(&home().join("a/b")).as_deref(), Some("~/a/b"));
         assert_eq!(to_local("~"), Some(home().to_path_buf()));
         assert_eq!(to_local("~/a/b"), Some(home().join("a/b")));
+    }
+
+    #[test]
+    fn to_local_rejects_absolute_spelling_of_a_home_path() {
+        assert_eq!(to_local(home().join("a/b").to_str().unwrap()), None);
+        assert_eq!(to_local(home().to_str().unwrap()), None);
     }
 
     #[test]

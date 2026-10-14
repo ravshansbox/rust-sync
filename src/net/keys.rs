@@ -5,6 +5,7 @@ use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
+/// This node's Noise static key pair; the public key is the node ID.
 pub struct Keys {
     pub private: Vec<u8>,
     pub public: Vec<u8>,

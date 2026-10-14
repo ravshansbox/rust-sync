@@ -282,12 +282,7 @@ impl Daemon {
             Msg::Index(entries) => entries.into_iter().for_each(|e| self.on_entry(from, e)),
             Msg::Request { path, hash } => self.on_request(from, path, hash),
             Msg::Data { path, hash, offset, bytes, eof } => self.on_data(from, &path, hash, offset, &bytes, eof),
-            Msg::Unavailable { path, hash } => {
-                if self.downloads.get(&path).is_some_and(|d| d.from == from && d.meta.hash == Some(hash)) {
-                    let d = self.downloads.remove(&path).unwrap();
-                    self.retry_elsewhere(path, d, from);
-                }
-            }
+            Msg::Unavailable { path, hash } => self.on_unavailable(from, path, hash),
         }
     }
 

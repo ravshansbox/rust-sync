@@ -105,6 +105,13 @@ impl Daemon {
         self.apply(from, path, &lp, d.meta, Some(d.tmp));
     }
 
+    pub(super) fn on_unavailable(&mut self, from: &str, path: String, hash: [u8; 32]) {
+        if self.downloads.get(&path).is_some_and(|d| d.from == from && d.meta.hash == Some(hash)) {
+            let d = self.downloads.remove(&path).unwrap();
+            self.retry_elsewhere(path, d, from);
+        }
+    }
+
     pub(super) fn cancel_download(&mut self, p: &str) {
         if let Some(d) = self.downloads.remove(p) {
             let _ = std::fs::remove_file(&d.tmp);
@@ -130,7 +137,7 @@ impl Daemon {
         }
     }
 
-    pub(super) fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
+    fn retry_elsewhere(&mut self, p: String, mut d: Download, gone: &str) {
         let _ = std::fs::remove_file(&d.tmp);
         self.remove_empty_parents(&p, &d.tmp);
         d.alts.retain(|a| a != gone && self.peers.contains_key(a));

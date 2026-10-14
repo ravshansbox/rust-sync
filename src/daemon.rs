@@ -832,7 +832,8 @@ impl Daemon {
 
     fn cancel_download(&mut self, p: &str) {
         if let Some(d) = self.downloads.remove(p) {
-            let _ = std::fs::remove_file(d.tmp);
+            let _ = std::fs::remove_file(&d.tmp);
+            self.remove_empty_parents(p, &d.tmp);
         }
     }
 
@@ -1741,6 +1742,27 @@ mod tests {
         assert!(a.try_recv().is_err());
         assert!(d.downloads.is_empty());
         assert_eq!(std::fs::read_to_string(dir.join("a")).unwrap(), "local");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cancelled_download_removes_the_folders_it_created() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("cancel-removes-folders");
+        std::fs::create_dir_all(&dir).unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        d.cfg.set_node(&me, "aa", "h:1", false);
+        let mut a = up(&mut d, "aa", 1);
+        while a.try_recv().is_ok() {}
+        let r = FileMeta { vv: Vv(vec![(1, 1)]), ..meta(0, 1) };
+        d.handle(Event::Peer { id: "aa".into(), conn: 1, msg: Msg::Index(vec![Entry { path: format!("{rp}/a/b/f"), meta: r }]) });
+        assert!(dir.join("a/b").is_dir());
+        let resp = d.on_ctl(&Req::AddPath { path: format!("{rp}/a"), is_dir: false });
+        assert!(resp.ok, "{}", resp.text);
+        assert!(d.downloads.is_empty());
+        assert!(!dir.join("a/b").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

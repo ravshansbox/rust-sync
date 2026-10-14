@@ -426,6 +426,15 @@ impl Daemon {
         for p in unwanted {
             self.cancel_download(&p);
         }
+        let unwanted: Vec<String> = self
+            .queued
+            .keys()
+            .filter(|p| self.cfg.root_of(p).is_none() || self.not_a_synced_file(p))
+            .cloned()
+            .collect();
+        for p in unwanted {
+            self.queued.remove(&p);
+        }
         self.reconcile_watches();
         for (root, _) in self.active_roots().difference(before) {
             log!("now syncing {root}");
@@ -1879,6 +1888,24 @@ mod tests {
         d.queued.insert("~/s/c".into(), ("aa".into(), meta(0, 0), Vec::new()));
         let text = d.on_ctl(&Req::Status).text;
         assert!(text.contains("\nFiles tracked: 2\nTransfers: 0 active, 1 queued\n"), "{text}");
+    }
+
+    #[test]
+    fn status_does_not_count_queued_transfers_for_paths_no_longer_synced() {
+        let mut d = daemon();
+        let me = d.me.clone();
+        let dir = test_dir("status-queued-unsynced");
+        let (s, t) = (format!("{}/s", dir.display()), format!("{}/t", dir.display()));
+        d.cfg.set_root(&me, &s, true, false);
+        d.cfg.set_root(&me, &t, true, false);
+        for p in [format!("{s}/a"), format!("{s}/d/b"), format!("{t}/c")] {
+            d.queued.insert(p, ("aa".into(), meta(0, 0), Vec::new()));
+        }
+        assert!(d.on_ctl(&Req::AddPath { path: format!("{s}/d"), is_dir: false }).ok);
+        assert!(d.on_ctl(&Req::RemovePath { path: t }).ok);
+        let text = d.on_ctl(&Req::Status).text;
+        assert!(text.contains("\nTransfers: 0 active, 1 queued\n"), "{text}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

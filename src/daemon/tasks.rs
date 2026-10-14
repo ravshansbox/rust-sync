@@ -1,4 +1,4 @@
-use super::{Event, TICK};
+use super::{ACCEPT_RETRY, Event, TICK};
 use crate::ctl::Resp;
 use notify::RecommendedWatcher;
 use std::collections::HashSet;
@@ -62,7 +62,7 @@ pub(super) fn ctl_listen(sock: &Path) -> std::io::Result<UnixListener> {
 pub(super) async fn ctl_loop(l: UnixListener, tx: mpsc::UnboundedSender<Event>) {
     loop {
         let Ok((s, _)) = l.accept().await else {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(ACCEPT_RETRY).await;
             continue;
         };
         tokio::spawn(ctl_conn(s, tx.clone()));

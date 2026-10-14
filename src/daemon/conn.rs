@@ -1,4 +1,4 @@
-use super::Event;
+use super::{ACCEPT_RETRY, Event};
 use crate::config;
 use crate::log::log;
 use crate::net::{self, Keys, Msg};
@@ -38,7 +38,7 @@ pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::Unbou
             Ok((s, addr)) => {
                 drop(tokio::spawn(connection(s, addr.ip().to_canonical(), None, keys.clone(), tx.clone(), port)));
             }
-            Err(_) => tokio::time::sleep(Duration::from_secs(1)).await,
+            Err(_) => tokio::time::sleep(ACCEPT_RETRY).await,
         }
     }
 }

@@ -67,6 +67,10 @@ async fn send(req: Req) -> anyhow::Result<()> {
         outln!("{}", resp.text.trim_end());
         return Ok(());
     }
+    send_offline(req)
+}
+
+fn send_offline(req: Req) -> anyhow::Result<()> {
     let me = my_keys()?.id();
     let path = paths::config_file();
     let mut cfg = Config::load(&path)?;

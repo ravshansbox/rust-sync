@@ -195,7 +195,7 @@ explain each one.
   same time, the change with the later file time wins, so a machine with a wrong
   clock can win when it shouldn't. The other version is still kept as a conflict
   copy.
-- **macOS only.** It may work on Linux, but that isn't tested.
+- **macOS only.** It does not build on other systems.
 - **Not synced:** empty folders, symlinks, extended attributes. Temporary files
   (`*.rsync-tmp`) and `.DS_Store` are ignored.
 - **Every node connects to every other node.** This is fine for a handful of machines.

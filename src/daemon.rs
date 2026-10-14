@@ -2249,12 +2249,20 @@ mod tests {
         let me = d.me.clone();
         d.cfg.set_node(&me, "aa", "h:1", false);
         up(&mut d, "aa", 1);
-        let tmp = test_dir("mismatch");
-        d.downloads.insert("~/s/f".into(), download("aa", meta(0, 0), &tmp));
-        let msg = Msg::Data { path: "~/s/f".into(), hash: [1; 32], offset: 0, bytes: b"abc".to_vec(), eof: true };
+        let dir = test_dir("mismatch");
+        std::fs::create_dir_all(&dir).unwrap();
+        let rp = dir.to_str().unwrap().to_string();
+        d.cfg.set_root(&me, &rp, true, false);
+        let p = format!("{rp}/f");
+        let tmp = dir.join(".f.rsync-tmp");
+        d.downloads.insert(p.clone(), download("aa", meta(0, 0), &tmp));
+        let msg = Msg::Data { path: p.clone(), hash: [1; 32], offset: 0, bytes: b"a".to_vec(), eof: true };
         d.handle(Event::Peer { id: "aa".into(), conn: 1, msg });
         assert!(d.downloads.is_empty());
         assert!(!tmp.exists());
+        assert!(!dir.join("f").exists());
+        assert!(!d.index.contains_key(&p));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

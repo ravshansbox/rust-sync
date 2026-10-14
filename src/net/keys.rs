@@ -14,11 +14,13 @@ pub struct Keys {
 }
 
 impl Keys {
+    /// The node ID: the public key in lowercase hex.
     pub fn id(&self) -> String {
         hex(&self.public)
     }
 }
 
+/// Read the key pair from `dir/key`, or create and save a new one if there is none.
 pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
     let path = dir.join("key");
     match std::fs::read(&path) {
@@ -42,11 +44,13 @@ pub fn load_or_create_keys(dir: &Path) -> anyhow::Result<Keys> {
     }
 }
 
+/// Generate a new Noise static key pair.
 pub(super) fn generate_keys() -> anyhow::Result<Keys> {
     let kp = Builder::new(PARAMS.parse()?).generate_keypair()?;
     Ok(Keys { private: kp.private, public: kp.public })
 }
 
+/// Bytes as lowercase hex.
 pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }

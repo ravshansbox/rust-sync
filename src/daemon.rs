@@ -35,7 +35,7 @@ use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
 use upload::MAX_UPLOADS;
 
-/// Every this often, ping peers, redial missing nodes and save the index.
+/// Every this often, redial missing nodes and save the index.
 const TICK: Duration = Duration::from_secs(30);
 /// Wait this long before accepting again after a failed accept.
 const ACCEPT_RETRY: Duration = Duration::from_secs(1);
@@ -253,7 +253,6 @@ impl Daemon {
 
     fn on_tick(&mut self) {
         self.ticks += 1;
-        self.broadcast(&Msg::Ping);
         self.dial_all();
         if self.ticks.is_multiple_of(RESCAN_TICKS) {
             self.rescan_all();

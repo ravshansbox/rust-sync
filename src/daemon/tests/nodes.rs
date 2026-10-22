@@ -116,7 +116,7 @@ fn duplicate_connection_that_is_kept_cancels_downloads_over_the_old_one() {
 }
 
 #[tokio::test]
-async fn tick_pings_peers_and_dials_offline_nodes_not_waiting_to_retry() {
+async fn tick_dials_offline_nodes_not_waiting_to_retry() {
     let mut d = daemon();
     let me = d.me.clone();
     for id in ["aa", "bb", "cc"] {
@@ -126,7 +126,6 @@ async fn tick_pings_peers_and_dials_offline_nodes_not_waiting_to_retry() {
     while rx.try_recv().is_ok() {}
     d.backoff.insert("bb".into(), Duration::from_secs(1));
     d.handle(Event::Tick);
-    assert!(matches!(rx.try_recv(), Ok(Msg::Ping)));
     assert_eq!(d.dialling, HashSet::from(["cc".to_string()]));
     d.handle(Event::Redial { id: "bb".into() });
     assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
@@ -253,7 +252,8 @@ async fn failed_dials_wait_twice_as_long_each_time_up_to_a_limit_until_connected
         d.handle(Event::DialDone { id: "aa".into() });
         waits.push(d.backoff["aa"].as_secs());
     }
-    assert_eq!(waits, [1, 2, 4, 8, 16, MAX_BACKOFF.as_secs(), MAX_BACKOFF.as_secs()]);
+    assert_eq!(waits, [1, 2, 4, 5, 5, 5, 5]);
+    assert_eq!(MAX_BACKOFF, Duration::from_secs(5));
     up(&mut d, "aa", 1);
     d.handle(Event::DialDone { id: "aa".into() });
     assert!(d.backoff.is_empty());

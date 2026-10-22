@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 /// First wait before redialling a node that dropped or could not be reached.
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 /// After a failed dial, retry after 1 s, then 2 s, 4 s... up to this.
-pub(super) const MAX_BACKOFF: Duration = super::TICK;
+pub(super) const MAX_BACKOFF: Duration = Duration::from_secs(5);
 /// Untrusted nodes remembered for `node list`. Older ones are forgotten, so repeated
 /// connection attempts can't grow the list without end.
 pub(super) const MAX_PENDING: usize = 20;

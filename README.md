@@ -122,7 +122,9 @@ on macOS; see [macOS Local Network privacy](#macos-local-network-privacy).
   and every address they resolve to is tried in parallel, with a
   new attempt every 250 ms (Happy Eyeballs, RFC 8305), and the first that
   connects is used. After a failed dial the node retries after 1 s, 2 s, 4 s…
-  up to 30 s. It listens on IPv4 and IPv6.
+  up to 5 s. It listens on IPv4 and IPv6.
+- **Liveness:** connected nodes ping each other every 5 s and drop a connection
+  after 15 s without a message, then dial again.
 - **State** is kept in `~/.rust-sync/` (`key`, `config.json`, `index.bin`). Set
   `RUST_SYNC_HOME` to use a different folder.
 

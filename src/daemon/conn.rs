@@ -13,8 +13,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 
-/// Drop a connection that has sent nothing for this long. Peers send a ping every tick.
-const IDLE_LIMIT: Duration = Duration::from_secs(95);
+/// Send a ping on every connection this often, so the peer can tell it is still there.
+const PING_EVERY: Duration = Duration::from_secs(5);
+/// Drop a connection that has sent nothing for this long: three missed pings.
+const IDLE_LIMIT: Duration = Duration::from_secs(15);
 /// Happy Eyeballs (RFC 8305): start the next address after this long, without
 /// waiting for the earlier attempts to fail.
 const ATTEMPT_DELAY: Duration = Duration::from_millis(250);
@@ -191,6 +193,7 @@ async fn serve(mut r: net::Reader, mut w: net::Writer, id: String, outbound: boo
     let (data_tx, mut data_rx) = mpsc::channel(8);
     tx.send(Event::Up { id: id.clone(), conn, outbound, ctl: ctl_tx, data: data_tx })?;
     let writer = async move {
+        let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + PING_EVERY, PING_EVERY);
         loop {
             tokio::select! {
                 biased;
@@ -198,6 +201,7 @@ async fn serve(mut r: net::Reader, mut w: net::Writer, id: String, outbound: boo
                     Some(m) => w.send(&m).await?,
                     None => return anyhow::Ok(()),
                 },
+                _ = ping.tick() => w.send(&Msg::Ping).await?,
                 Some(m) = data_rx.recv() => w.send(&m).await?,
             }
         }

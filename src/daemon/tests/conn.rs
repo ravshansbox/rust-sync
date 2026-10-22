@@ -239,6 +239,44 @@ async fn connection_ends_on_the_next_message_once_the_daemon_has_stopped() {
 }
 
 #[tokio::test]
+async fn connection_pings_the_peer_every_5_seconds_and_drops_it_after_15_seconds_of_silence() {
+    let dir = test_dir("ping");
+    let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());
+    let b = Arc::new(net::load_or_create_keys(&dir.join("b")).unwrap());
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let start = tokio::time::Instant::now();
+    let peer = async {
+        let s = TcpStream::connect(addr).await.unwrap();
+        let (mut r, mut w, _) = net::handshake(s, &a, true).await.unwrap();
+        w.send(&Msg::Hello { port: 4000, probe: false, trusts_you: true }).await.unwrap();
+        r.recv().await.unwrap();
+        let mut pings = Vec::new();
+        while let Ok(Msg::Ping) = r.recv().await {
+            pings.push(start.elapsed().as_secs());
+        }
+        (pings, w)
+    };
+    let listener = async {
+        let (s, peer) = l.accept().await.unwrap();
+        connection_inner(s, peer.ip(), None, b.clone(), tx, 5000).await
+    };
+    let daemon = async {
+        let Some(Event::Auth { reply, .. }) = rx.recv().await else { panic!() };
+        reply.send(true).unwrap();
+        let Some(Event::Up { ctl, .. }) = rx.recv().await else { panic!() };
+        let Some(Event::Down { .. }) = rx.recv().await else { panic!() };
+        ctl
+    };
+    let ((pings, _w), res, _ctl) = tokio::join!(peer, listener, daemon);
+    assert_eq!(pings[..2], [5, 10]);
+    assert_eq!(res.unwrap_err().to_string(), "peer went quiet");
+    assert_eq!(start.elapsed().as_secs(), 15);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
 async fn accept_loop_serves_each_incoming_connection_with_its_ipv4_address() {
     let dir = test_dir("accept");
     let a = Arc::new(net::load_or_create_keys(&dir.join("a")).unwrap());

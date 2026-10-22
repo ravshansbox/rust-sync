@@ -48,11 +48,10 @@ pub(super) async fn accept_loop(l: TcpListener, keys: Arc<Keys>, tx: mpsc::Unbou
     }
 }
 
-/// Connect to node `id` at `addr` and handle the connection, then send `DialDone`.
+/// Connect to node `id` at any of `addrs` and handle the connection, then send `DialDone`.
 /// `quiet` hides the log line when the node cannot be reached.
-pub(super) async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
-    let addr = config::with_port(&addr);
-    let failure = match timeout(DIAL_TIMEOUT, connect_any(&addr)).await {
+pub(super) async fn dial(addrs: Vec<String>, id: String, quiet: bool, keys: Arc<Keys>, tx: mpsc::UnboundedSender<Event>, port: u16) {
+    let failure = match timeout(DIAL_TIMEOUT, connect_any(&addrs)).await {
         Ok(Ok(s)) => {
             let ip = s.peer_addr().map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |a| a.ip().to_canonical());
             connection(s, ip, Some(id.clone()), keys, tx.clone(), port).await;
@@ -69,22 +68,29 @@ pub(super) async fn dial(addr: String, id: String, quiet: bool, keys: Arc<Keys>,
         Err(_) => Some("timed out".to_string()),
     };
     if let Some(why) = failure.filter(|_| !quiet) {
-        log!("cannot reach {} at {addr}: {why}", net::pretty_id(&id));
+        let addrs: Vec<String> = addrs.iter().map(|a| config::with_port(a)).collect();
+        log!("cannot reach {} at {}: {why}", net::pretty_id(&id), addrs.join(" or "));
     }
     let _ = tx.send(Event::DialDone { id });
 }
 
-/// Connect to any address `addr` resolves to. Tries them in parallel, a new one every
-/// `ATTEMPT_DELAY`, alternating IPv6 and IPv4, and keeps the first that connects
-/// (Happy Eyeballs, RFC 8305). A failed attempt starts the next one at once.
-pub(super) async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
-    let mut next = interleave(tokio::net::lookup_host(addr).await?).into_iter();
+/// Connect to any address that `addrs` resolve to. Looks up all names at once and
+/// tries their addresses in parallel as they arrive, a new one every `ATTEMPT_DELAY`,
+/// alternating IPv6 and IPv4, and keeps the first that connects (Happy Eyeballs,
+/// RFC 8305). A failed attempt starts the next one at once.
+pub(super) async fn connect_any(addrs: &[String]) -> std::io::Result<TcpStream> {
+    let mut lookups = tokio::task::JoinSet::new();
+    for a in addrs {
+        let a = config::with_port(a);
+        lookups.spawn(async move { tokio::net::lookup_host(a).await.map(interleave) });
+    }
+    let mut next = std::collections::VecDeque::new();
     let mut attempts = tokio::task::JoinSet::new();
     let mut last_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no addresses found");
     loop {
-        if let Some(a) = next.next() {
+        if let Some(a) = next.pop_front() {
             attempts.spawn(TcpStream::connect(a));
-        } else if attempts.is_empty() {
+        } else if attempts.is_empty() && lookups.is_empty() {
             return Err(last_err);
         }
         tokio::select! {
@@ -93,7 +99,12 @@ pub(super) async fn connect_any(addr: &str) -> std::io::Result<TcpStream> {
                 Ok(Err(e)) => last_err = e,
                 Err(e) => last_err = std::io::Error::other(e),
             },
-            () = tokio::time::sleep(ATTEMPT_DELAY), if next.len() > 0 => {}
+            Some(res) = lookups.join_next() => match res {
+                Ok(Ok(found)) => next.extend(found),
+                Ok(Err(e)) => last_err = e,
+                Err(e) => last_err = std::io::Error::other(e),
+            },
+            () = tokio::time::sleep(ATTEMPT_DELAY), if !next.is_empty() => {}
         }
     }
 }

@@ -49,7 +49,8 @@ pub fn nodes_text(
             Some(false) => "  offline",
             None => "",
         };
-        format!("  {}  {}{state}\n", net::pretty_id(id), n.addr)
+        let also = if n.aliases.is_empty() { String::new() } else { format!(" (also {})", n.aliases.join(", ")) };
+        format!("  {}  {}{also}{state}\n", net::pretty_id(id), n.addr)
     }));
     if !pending.is_empty() {
         s.push_str("\nWaiting to be trusted (run `rust-sync node add <address>` to accept):\n");

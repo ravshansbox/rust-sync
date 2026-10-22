@@ -6,11 +6,19 @@ use tokio::net::{TcpListener, TcpStream};
 async fn connect_any_falls_back_to_an_address_that_listens_and_fails_when_none_does() {
     let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = l.local_addr().unwrap().port();
-    let s = connect_any(&format!("localhost:{port}")).await.unwrap();
+    let s = connect_any(&[format!("localhost:{port}")]).await.unwrap();
     assert_eq!(s.peer_addr().unwrap(), l.local_addr().unwrap());
     drop((s, l));
-    let e = connect_any("127.0.0.1:1").await.unwrap_err();
+    let e = connect_any(&["127.0.0.1:1".into()]).await.unwrap_err();
     assert_eq!(e.kind(), std::io::ErrorKind::ConnectionRefused);
+}
+
+#[tokio::test]
+async fn connect_any_falls_back_to_an_alias_when_the_first_name_does_not_connect() {
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = l.local_addr().unwrap().port();
+    let s = connect_any(&["127.0.0.1:1".into(), format!("localhost:{port}")]).await.unwrap();
+    assert_eq!(s.peer_addr().unwrap(), l.local_addr().unwrap());
 }
 
 #[tokio::test]
@@ -19,7 +27,7 @@ async fn dial_reports_done_when_the_peer_cannot_be_reached() {
     let keys = Arc::new(net::load_or_create_keys(&dir).unwrap());
     let addr = TcpListener::bind("127.0.0.1:0").await.unwrap().local_addr().unwrap();
     let (tx, mut rx) = mpsc::unbounded_channel();
-    dial(addr.to_string(), "ab".repeat(32), true, keys, tx, 0).await;
+    dial(vec![addr.to_string()], "ab".repeat(32), true, keys, tx, 0).await;
     let Some(Event::DialDone { id }) = rx.recv().await else { panic!("expected DialDone") };
     assert_eq!(id, "ab".repeat(32));
     assert!(rx.recv().await.is_none());

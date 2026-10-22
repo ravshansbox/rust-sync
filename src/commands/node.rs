@@ -42,6 +42,20 @@ pub(super) async fn node_add(a: NodeAdd) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Check that the node `id` answers at `addr`, then also dial it there.
+pub(super) async fn alias_add(id: &str, addr: &str) -> anyhow::Result<()> {
+    let keys = my_keys()?;
+    let cfg = Config::load(&paths::config_file())?;
+    let addr = config::with_port(addr);
+    let expected = node_id(id)?;
+    let (id, _) = probe(&addr, &keys, &cfg).await?;
+    outln!("Node ID: {}", net::pretty_id(&id));
+    if id != expected {
+        bail!("that is not the ID you gave ({}). Alias not added.", net::pretty_id(&expected));
+    }
+    send(Req::AddAlias { id, addr }).await
+}
+
 /// Ask the user a yes/no question on stdin. Only "y" counts as yes.
 fn confirm(question: &str) -> std::io::Result<bool> {
     out!("{question} [y/N] ");

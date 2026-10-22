@@ -1,5 +1,6 @@
 use super::*;
-use crate::cli::NodeAdd;
+use crate::cli::{AliasCmd, NodeAdd};
+use crate::config;
 use crate::net::Msg;
 use crate::paths::test_dir;
 use std::path::PathBuf;
@@ -159,4 +160,57 @@ async fn send_to_a_running_daemon_reports_its_reply_and_leaves_the_config_file_a
     daemon.await.unwrap();
     assert!(!paths::config_file().exists());
     std::fs::remove_file(&sock).unwrap();
+}
+
+async fn alias_add_to(keys: &net::Keys, id: &str) -> (String, anyhow::Result<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let server = async {
+        let (s, _) = listener.accept().await.unwrap();
+        let (mut r, mut w, _) = net::handshake(s, keys, false).await.unwrap();
+        let _ = r.recv().await;
+        let _ = w.send(&Msg::Hello { port: 1, probe: false, trusts_you: true }).await;
+    };
+    let alias = AliasCmd::Add { id: id.into(), addr: addr.clone() };
+    let ((), result) = tokio::join!(server, run(Cmd::Node { cmd: NodeCmd::Alias { cmd: alias } }));
+    (addr, result)
+}
+
+#[tokio::test]
+async fn node_alias_add_checks_the_id_at_the_alias_before_saving_it() {
+    let _key = STATE_KEY.lock().await;
+    let dir = test_dir("alias-add");
+    let keys = net::load_or_create_keys(&dir).unwrap();
+    let other = "ab".repeat(32);
+    send(Req::AddNode { id: other.clone(), addr: "h:1".into() }).await.unwrap();
+    let (_, result) = alias_add_to(&keys, &other).await;
+    let want = format!("that is not the ID you gave ({}). Alias not added.", net::pretty_id(&other));
+    assert_eq!(result.unwrap_err().to_string(), want);
+    send(Req::AddNode { id: keys.id(), addr: "h:2".into() }).await.unwrap();
+    let (addr, result) = alias_add_to(&keys, &net::pretty_id(&keys.id())).await;
+    result.unwrap();
+    let cfg = Config::load(&paths::config_file()).unwrap();
+    assert_eq!(cfg.trusted(&other).unwrap().addrs().collect::<Vec<_>>(), ["h:1"]);
+    assert_eq!(cfg.trusted(&keys.id()).unwrap().addrs().collect::<Vec<_>>(), ["h:2", addr.as_str()]);
+    std::fs::remove_file(paths::config_file()).unwrap();
+    std::fs::remove_file(paths::state_dir().join("key")).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
+async fn node_alias_add_and_remove_add_the_default_port() {
+    let _key = STATE_KEY.lock().await;
+    let id = "ab".repeat(32);
+    send(Req::AddNode { id: id.clone(), addr: "h:1".into() }).await.unwrap();
+    send(Req::AddAlias { id: id.clone(), addr: "l:1".into() }).await.unwrap();
+    let rm = AliasCmd::Remove { id: id.clone(), addr: "l:1".into() };
+    run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap();
+    let rm = AliasCmd::Remove { id: "not-an-id".into(), addr: "l".into() };
+    let err = run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap_err();
+    assert_eq!(err.to_string(), "not a valid node ID");
+    let rm = AliasCmd::Remove { id: id.clone(), addr: "l".into() };
+    let err = run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap_err();
+    assert_eq!(err.to_string(), format!("{} is not an alias of node {}", config::with_port("l"), net::pretty_id(&id)));
+    std::fs::remove_file(paths::config_file()).unwrap();
+    std::fs::remove_file(paths::state_dir().join("key")).unwrap();
 }

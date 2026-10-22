@@ -24,14 +24,15 @@ fn nodes_text_shows_state_and_pending_nodes() {
     assert_eq!(nodes_text(&cfg, |_| None, &none), "  (none) add one with `rust-sync node add <host>`\n");
     cfg.set_node("me", "aaaaaaaabbbbbbbb", "a:1", false);
     cfg.set_node("me", "cccccccc", "c:1", false);
+    cfg.set_aliases("me", "cccccccc", vec!["c2:1".into(), "c3:1".into()]);
     cfg.set_node("me", "dddddddd", "d:1", true);
     let pending = BTreeMap::from([("eeeeeeee".to_string(), "1.2.3.4:5".to_string())]);
     assert_eq!(
         nodes_text(&cfg, |id| Some(id == "cccccccc"), &pending),
-        "  AAAAAAAA-BBBBBBBB  a:1  offline\n  CCCCCCCC  c:1  connected\n\n\
+        "  AAAAAAAA-BBBBBBBB  a:1  offline\n  CCCCCCCC  c:1 (also c2:1, c3:1)  connected\n\n\
          Waiting to be trusted (run `rust-sync node add <address>` to accept):\n  EEEEEEEE  1.2.3.4:5\n"
     );
-    assert_eq!(nodes_text(&cfg, |_| None, &none), "  AAAAAAAA-BBBBBBBB  a:1\n  CCCCCCCC  c:1\n");
+    assert_eq!(nodes_text(&cfg, |_| None, &none), "  AAAAAAAA-BBBBBBBB  a:1\n  CCCCCCCC  c:1 (also c2:1, c3:1)\n");
 }
 
 #[test]

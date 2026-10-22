@@ -20,6 +20,10 @@ pub enum Req {
     AddNode { id: String, addr: String },
     /// Stop trusting the node with this ID.
     RemoveNode { id: String },
+    /// Also dial the node with this ID at `addr`.
+    AddAlias { id: String, addr: String },
+    /// Stop dialling the node with this ID at `addr`.
+    RemoveAlias { id: String, addr: String },
     /// List the trusted nodes.
     ListNodes,
     /// Report the daemon's status. Also used to check that a daemon is running.
@@ -103,6 +107,25 @@ pub fn apply(cfg: &mut Config, me: &str, req: &Req) -> Result<String, String> {
             let Some(addr) = cfg.trusted(id).map(|n| n.addr.clone()) else { return Err("No such node".into()) };
             cfg.set_node(me, id, &addr, true);
             Ok(format!("Removed node {}", crate::net::pretty_id(id)))
+        }
+        Req::AddAlias { id, addr } => {
+            let n = cfg.trusted(id).ok_or("No such node")?;
+            if n.addrs().any(|a| a == addr) {
+                return Err(format!("{addr} is already an address of node {}", crate::net::pretty_id(id)));
+            }
+            let mut aliases = n.aliases.clone();
+            aliases.push(addr.clone());
+            cfg.set_aliases(me, id, aliases);
+            Ok(format!("Added alias {addr} to node {}", crate::net::pretty_id(id)))
+        }
+        Req::RemoveAlias { id, addr } => {
+            let n = cfg.trusted(id).ok_or("No such node")?;
+            if !n.aliases.contains(addr) {
+                return Err(format!("{addr} is not an alias of node {}", crate::net::pretty_id(id)));
+            }
+            let aliases = n.aliases.iter().filter(|a| *a != addr).cloned().collect();
+            cfg.set_aliases(me, id, aliases);
+            Ok(format!("Removed alias {addr} from node {}", crate::net::pretty_id(id)))
         }
         Req::ListNodes | Req::Status => unreachable!("read-only request"),
     }

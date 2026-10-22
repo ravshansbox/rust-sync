@@ -109,3 +109,21 @@ async fn call_at_returns_reply_or_none_when_daemon_is_absent_or_closes() {
     assert_eq!(server.await.unwrap(), "{\"RemoveNode\":{\"id\":\"abcd\"}}\n");
     std::fs::remove_file(&sock).unwrap();
 }
+
+#[test]
+fn apply_adds_and_removes_aliases_of_trusted_nodes() {
+    let mut c = Config::default();
+    let add = |addr: &str| Req::AddAlias { id: "abcdefgh12".into(), addr: addr.into() };
+    let rm = |addr: &str| Req::RemoveAlias { id: "abcdefgh12".into(), addr: addr.into() };
+    assert_eq!(apply(&mut c, "me", &add("l:1")).unwrap_err(), "No such node");
+    apply(&mut c, "me", &Req::AddNode { id: "abcdefgh12".into(), addr: "h:1".into() }).unwrap();
+    assert_eq!(apply(&mut c, "me", &add("l:1")).unwrap(), "Added alias l:1 to node ABCDEFGH-12");
+    assert_eq!(apply(&mut c, "me", &add("l:1")).unwrap_err(), "l:1 is already an address of node ABCDEFGH-12");
+    assert_eq!(apply(&mut c, "me", &add("h:1")).unwrap_err(), "h:1 is already an address of node ABCDEFGH-12");
+    assert_eq!(c.trusted("abcdefgh12").unwrap().addrs().collect::<Vec<_>>(), ["h:1", "l:1"]);
+    assert_eq!(apply(&mut c, "me", &rm("h:1")).unwrap_err(), "h:1 is not an alias of node ABCDEFGH-12");
+    assert_eq!(apply(&mut c, "me", &rm("l:1")).unwrap(), "Removed alias l:1 from node ABCDEFGH-12");
+    assert_eq!(c.trusted("abcdefgh12").unwrap().addrs().collect::<Vec<_>>(), ["h:1"]);
+    apply(&mut c, "me", &Req::RemoveNode { id: "abcdefgh12".into() }).unwrap();
+    assert_eq!(apply(&mut c, "me", &rm("l:1")).unwrap_err(), "No such node");
+}

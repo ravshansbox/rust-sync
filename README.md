@@ -67,6 +67,8 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync node add <host[:port]> [--id ID] [-y]` | | Trust a node |
 | `rust-sync node list` | `node ls` | Trusted nodes, their addresses and connection state |
 | `rust-sync node remove <ID>` | `node rm` | Stop trusting a node |
+| `rust-sync node alias add <ID> <host[:port]>` | | Check the node's ID at another address and also dial it there |
+| `rust-sync node alias remove <ID> <host[:port]>` | `node alias rm` | Stop dialling a node at that address |
 | `rust-sync service install [--system]` | | Start the daemon at login, or at boot with `--system` (and now) |
 | `rust-sync service uninstall` | | Stop it and stop starting it automatically |
 | `rust-sync service start` | | Start the daemon now |
@@ -75,9 +77,24 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync status` | | Nodes, paths, connections, pending requests |
 | `rust-sync id` | | This node's ID |
 
-If the daemon isn't running, `path add`, `path remove`, `node add` and
-`node remove` edit the config file.
+If the daemon isn't running, `path add`, `path remove`, `node add`,
+`node remove`, `node alias add` and `node alias remove` edit the config file.
 The changes take effect when the daemon starts.
+
+## Aliases
+
+A node can have other addresses besides the one you added it with. For example,
+to reach `macmini` over the local network when Tailscale is down:
+
+```sh
+rust-sync node alias add <ID> macmini.local
+```
+
+This connects to `macmini.local` and checks that the node there has that ID.
+From then on, the daemon looks up the main address and every alias at the same
+time and keeps the first connection that works. Aliases are shared, so every node
+tries them. A local address like `macmini.local` may need Local Network access
+on macOS; see [macOS Local Network privacy](#macos-local-network-privacy).
 
 ## How it works
 
@@ -101,7 +118,8 @@ The changes take effect when the daemon starts.
   Connections use the Noise XX handshake (the `snow` crate), so traffic is
   encrypted and both sides check each other's key. A node only talks to nodes it
   trusts.
-- **Connecting:** every address a name resolves to is tried in parallel, with a
+- **Connecting:** the main address and aliases are looked up at the same time,
+  and every address they resolve to is tried in parallel, with a
   new attempt every 250 ms (Happy Eyeballs, RFC 8305), and the first that
   connects is used. After a failed dial the node retries after 1 s, 2 s, 4 s…
   up to 30 s. It listens on IPv4 and IPv6.

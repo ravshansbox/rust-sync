@@ -148,3 +148,26 @@ fn load_fails_when_the_file_cannot_be_read() {
     assert!(Config::load(&dir).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn set_node_keeps_aliases_and_set_aliases_bumps_the_clock() {
+    let mut c = Config::default();
+    c.set_node("me", "p1", "h:1", false);
+    c.set_aliases("me", "p1", vec!["l:1".into()]);
+    assert_eq!(c.shared.nodes["p1"].stamp, Stamp(2, "me".into()));
+    c.set_node("me", "p1", "h:2", false);
+    let n = c.trusted("p1").unwrap();
+    assert_eq!(n.addrs().collect::<Vec<_>>(), ["h:2", "l:1"]);
+}
+
+#[test]
+fn load_accepts_a_config_file_without_aliases() {
+    let dir = test_dir("cfg-no-aliases");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.json");
+    let json = r#"{"port":1,"clock":1,"shared":{"nodes":{"p1":{"addr":"h:1","removed":false,"stamp":[1,"me"]}},"roots":{}}}"#;
+    std::fs::write(&path, json).unwrap();
+    let c = Config::load(&path).unwrap();
+    assert_eq!(c.trusted("p1").unwrap().addrs().collect::<Vec<_>>(), ["h:1"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

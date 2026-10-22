@@ -132,7 +132,7 @@ impl Daemon {
         // Only report the first failure in a row, so an offline node doesn't flood the log.
         let quiet = self.backoff.contains_key(id);
         self.dialling.insert(id.to_string());
-        tokio::spawn(dial(n.addr.clone(), id.to_string(), quiet, self.keys.clone(), self.tx.clone(), self.cfg.port));
+        tokio::spawn(dial(n.addrs().map(String::from).collect(), id.to_string(), quiet, self.keys.clone(), self.tx.clone(), self.cfg.port));
     }
 
     fn redial_after(&mut self, id: String, wait: Duration) {

@@ -20,10 +20,20 @@ pub struct Stamp(pub u64, pub String);
 pub struct NodeEntry {
     /// Where to dial the node, as `host` or `host:port`.
     pub addr: String,
+    /// Other addresses to dial at the same time, such as a local name.
+    #[serde(default)]
+    pub aliases: Vec<String>,
     /// True if the node was removed from the list.
     pub removed: bool,
     /// When this entry was last changed.
     pub stamp: Stamp,
+}
+
+impl NodeEntry {
+    /// The main address, then the aliases.
+    pub fn addrs(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.addr.as_str()).chain(self.aliases.iter().map(String::as_str))
+    }
 }
 
 /// A synced folder or file in the shared list, and whether it was removed.
@@ -88,7 +98,16 @@ impl Config {
 
     pub fn set_node(&mut self, me: &str, id: &str, addr: &str, removed: bool) {
         let stamp = self.stamp(me);
-        self.shared.nodes.insert(id.into(), NodeEntry { addr: addr.into(), removed, stamp });
+        let aliases = self.shared.nodes.get(id).map(|n| n.aliases.clone()).unwrap_or_default();
+        self.shared.nodes.insert(id.into(), NodeEntry { addr: addr.into(), aliases, removed, stamp });
+    }
+
+    pub fn set_aliases(&mut self, me: &str, id: &str, aliases: Vec<String>) {
+        let stamp = self.stamp(me);
+        if let Some(n) = self.shared.nodes.get_mut(id) {
+            n.aliases = aliases;
+            n.stamp = stamp;
+        }
     }
 
     pub fn active_roots(&self) -> impl Iterator<Item = (&String, &RootEntry)> {

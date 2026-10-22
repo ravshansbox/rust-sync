@@ -71,6 +71,31 @@ pub enum NodeCmd {
         /// The node's ID, as shown by `rust-sync node list`.
         id: String,
     },
+    /// Add or remove other addresses for a node, tried when the main one does not connect.
+    Alias {
+        #[command(subcommand)]
+        cmd: AliasCmd,
+    },
+}
+
+/// A `node alias` subcommand.
+#[derive(Subcommand)]
+pub enum AliasCmd {
+    /// Check the node's ID at another address and also dial it there.
+    Add {
+        /// The node's ID, as shown by `rust-sync node list`.
+        id: String,
+        /// Hostname or IP, with an optional :port.
+        addr: String,
+    },
+    /// Stop dialling a node at an alias.
+    #[command(visible_alias = "rm")]
+    Remove {
+        /// The node's ID, as shown by `rust-sync node list`.
+        id: String,
+        /// The alias, as shown by `rust-sync node list`.
+        addr: String,
+    },
 }
 
 /// A `service` subcommand.

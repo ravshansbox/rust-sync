@@ -44,3 +44,14 @@ fn daemon_and_service_install_flags_parse() {
     let cli = parse(&["service", "install"]).unwrap();
     assert!(matches!(cli.cmd, Cmd::Service { cmd: ServiceCmd::Install { system: false } }));
 }
+
+#[test]
+fn node_alias_add_and_remove_parse() {
+    let cli = parse(&["node", "alias", "add", "x", "host.local"]).unwrap();
+    let Cmd::Node { cmd: NodeCmd::Alias { cmd: AliasCmd::Add { id, addr } } } = cli.cmd else { panic!() };
+    assert_eq!((id.as_str(), addr.as_str()), ("x", "host.local"));
+    let cli = parse(&["node", "alias", "rm", "x", "host.local"]).unwrap();
+    let Cmd::Node { cmd: NodeCmd::Alias { cmd: AliasCmd::Remove { id, addr } } } = cli.cmd else { panic!() };
+    assert_eq!((id.as_str(), addr.as_str()), ("x", "host.local"));
+    assert!(parse(&["node", "alias", "add", "x"]).is_err());
+}

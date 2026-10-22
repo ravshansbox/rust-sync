@@ -6,6 +6,7 @@ use super::{Daemon, Event};
 use crate::index::Entry;
 use crate::log::log;
 use crate::net::{self, Msg};
+use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -27,6 +28,8 @@ pub(super) struct Peer {
     pub(super) ctl: mpsc::UnboundedSender<Msg>,
     /// File data. Bounded, so a slow peer slows the upload down instead of filling RAM.
     pub(super) data: mpsc::Sender<Msg>,
+    /// This side's address of the connection.
+    pub(super) local: Option<SocketAddr>,
 }
 
 impl Daemon {
@@ -112,6 +115,21 @@ impl Daemon {
         self.pending_order.retain(|x| x != id);
     }
 
+    /// Drop connections whose local address is gone, then dial every node we are not connected to at once.
+    pub(super) fn on_network_change(&mut self) {
+        let dead: Vec<(String, u64)> = self
+            .peers
+            .iter()
+            .filter(|(_, p)| p.local.is_some_and(|l| !is_local(l)))
+            .map(|(id, p)| (id.clone(), p.conn))
+            .collect();
+        for (id, conn) in dead {
+            self.peer_down(id, conn);
+        }
+        self.backoff.clear();
+        self.dial_all();
+    }
+
     /// Dial every trusted node we are not connected to, except those waiting to retry.
     pub(super) fn dial_all(&mut self) {
         let ids: Vec<String> =
@@ -143,4 +161,10 @@ impl Daemon {
             let _ = tx.send(Event::Redial { id });
         });
     }
+}
+
+/// Whether this Mac still has the IP address of `addr`.
+fn is_local(mut addr: SocketAddr) -> bool {
+    addr.set_port(0);
+    UdpSocket::bind(addr).is_ok()
 }

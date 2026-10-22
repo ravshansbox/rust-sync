@@ -149,6 +149,7 @@ pub(super) async fn connection_inner(
     port: u16,
 ) -> anyhow::Result<()> {
     let outbound = expect.is_some();
+    let local = s.local_addr().ok();
     let (mut r, mut w, id) = net::handshake(s, &keys, outbound).await?;
     if let Some(e) = &expect
         && *e != id
@@ -183,15 +184,22 @@ pub(super) async fn connection_inner(
         log!("node {} does not trust this node yet", net::pretty_id(&id));
         return Ok(());
     }
-    serve(r, w, id, outbound, &tx).await
+    serve(r, w, id, outbound, local, &tx).await
 }
 
 /// Pass messages both ways for an authenticated connection until either side stops.
-async fn serve(mut r: net::Reader, mut w: net::Writer, id: String, outbound: bool, tx: &mpsc::UnboundedSender<Event>) -> anyhow::Result<()> {
+async fn serve(
+    mut r: net::Reader,
+    mut w: net::Writer,
+    id: String,
+    outbound: bool,
+    local: Option<SocketAddr>,
+    tx: &mpsc::UnboundedSender<Event>,
+) -> anyhow::Result<()> {
     let conn = NEXT_CONN.fetch_add(1, Ordering::Relaxed);
     let (ctl_tx, mut ctl_rx) = mpsc::unbounded_channel();
     let (data_tx, mut data_rx) = mpsc::channel(8);
-    tx.send(Event::Up { id: id.clone(), conn, outbound, ctl: ctl_tx, data: data_tx })?;
+    tx.send(Event::Up { id: id.clone(), conn, outbound, ctl: ctl_tx, data: data_tx, local })?;
     let writer = async move {
         let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + PING_EVERY, PING_EVERY);
         loop {

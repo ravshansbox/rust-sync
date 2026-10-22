@@ -125,6 +125,9 @@ on macOS; see [macOS Local Network privacy](#macos-local-network-privacy).
   up to 5 s. It listens on IPv4 and IPv6.
 - **Liveness:** connected nodes ping each other every 5 s and drop a connection
   after 15 s without a message, then dial again.
+- **Network changes:** when an address or interface changes (for example
+  Tailscale or Wi-Fi goes down), connections whose local address is gone are
+  dropped and every missing node is dialled at once.
 - **State** is kept in `~/.rust-sync/` (`key`, `config.json`, `index.bin`). Set
   `RUST_SYNC_HOME` to use a different folder.
 

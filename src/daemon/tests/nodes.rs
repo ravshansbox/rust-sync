@@ -90,7 +90,7 @@ fn duplicate_connection_is_kept_only_if_dialled_by_the_lower_id() {
         let mut up = |conn, outbound| {
             let (ctl, mut rx) = mpsc::unbounded_channel();
             let data = mpsc::channel(1).0;
-            d.handle(Event::Up { id: id.into(), conn, outbound, ctl, data });
+            d.handle(Event::Up { id: id.into(), conn, outbound, ctl, data, local: None });
             matches!(rx.try_recv(), Ok(Msg::Config(_)))
         };
         assert!(up(1, !keep));
@@ -108,7 +108,7 @@ fn duplicate_connection_that_is_kept_cancels_downloads_over_the_old_one() {
     let tmp = test_dir("dup-down");
     d.downloads.insert("~/s/f".into(), download("ff", meta(0, 0), &tmp));
     let (ctl, _rx2) = mpsc::unbounded_channel();
-    d.handle(Event::Up { id: "ff".into(), conn: 2, outbound: false, ctl, data: mpsc::channel(1).0 });
+    d.handle(Event::Up { id: "ff".into(), conn: 2, outbound: false, ctl, data: mpsc::channel(1).0, local: None });
     assert!(tmp.exists());
     let _rx3 = up(&mut d, "ff", 3);
     assert!(!tmp.exists());
@@ -394,4 +394,28 @@ async fn queued_download_that_starts_and_loses_its_node_is_requested_from_anothe
     assert!(matches!(b.try_recv(), Ok(Msg::Request { path, .. }) if path == p));
     assert_eq!(d.downloads[&p].from, "bb");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
+async fn network_change_drops_connections_whose_local_address_is_gone_and_dials_offline_nodes_at_once() {
+    let mut d = daemon();
+    let me = d.me.clone();
+    for id in ["aa", "bb", "cc", "dd"] {
+        d.cfg.set_node(&me, id, "127.0.0.1:1", false);
+    }
+    let mut up_at = |id: &str, conn, local: Option<&str>| {
+        let (ctl, rx) = mpsc::unbounded_channel();
+        let local = local.map(|l| l.parse().unwrap());
+        d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0, local });
+        rx
+    };
+    let _aa = up_at("aa", 1, Some("127.0.0.1:5"));
+    let _bb = up_at("bb", 2, Some("192.0.2.1:5"));
+    let _dd = up_at("dd", 4, None);
+    d.backoff.insert("cc".into(), MAX_BACKOFF);
+    d.handle(Event::NetworkChanged);
+    let mut connected: Vec<_> = d.peers.keys().cloned().collect();
+    connected.sort();
+    assert_eq!(connected, ["aa", "dd"]);
+    assert_eq!(d.dialling, HashSet::from(["bb".to_string(), "cc".to_string()]));
 }

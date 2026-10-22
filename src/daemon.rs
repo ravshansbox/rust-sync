@@ -11,6 +11,7 @@ use crate::paths;
 use anyhow::{Context, bail};
 use notify::{RecommendedWatcher, RecursiveMode};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,6 +21,7 @@ mod batch;
 mod config;
 mod conn;
 mod download;
+mod netwatch;
 mod peers;
 mod remote;
 mod scan;
@@ -30,6 +32,7 @@ mod upload;
 use batch::batches;
 use conn::{accept_loop, bind};
 use download::Download;
+use netwatch::watch_network;
 use peers::Peer;
 use tasks::{ctl_listen, ctl_loop, shutdown_on_signal, tick_loop, watch};
 pub use text::{nodes_text, paths_text, status_text};
@@ -53,7 +56,8 @@ enum Event {
     /// A peer finished the handshake. Reply with whether we trust it.
     Auth { id: String, addr: Option<String>, reply: oneshot::Sender<bool> },
     /// A trusted peer connected. `ctl` and `data` send messages to it; `data` is bounded so file data cannot flood memory.
-    Up { id: String, conn: u64, outbound: bool, ctl: mpsc::UnboundedSender<Msg>, data: mpsc::Sender<Msg> },
+    /// `local` is this side's address of the connection.
+    Up { id: String, conn: u64, outbound: bool, ctl: mpsc::UnboundedSender<Msg>, data: mpsc::Sender<Msg>, local: Option<SocketAddr> },
     /// Connection `conn` to a peer closed.
     Down { id: String, conn: u64 },
     /// An outgoing dial attempt ended, whether or not it connected.
@@ -64,6 +68,8 @@ enum Event {
     Peer { id: String, conn: u64, msg: Msg },
     /// A request from the control socket, with a channel for the reply.
     Ctl(Req, oneshot::Sender<Resp>),
+    /// The Mac's network addresses or interfaces changed.
+    NetworkChanged,
     /// Stop the daemon.
     Shutdown,
 }
@@ -144,6 +150,7 @@ async fn run_inner(port: Option<u16>) -> anyhow::Result<()> {
     tokio::spawn(ctl_loop(ctl_listen(&sock)?, tx.clone()));
 
     tokio::spawn(tick_loop(tx.clone()));
+    tokio::spawn(watch_network(tx.clone()));
     tokio::spawn(shutdown_on_signal(tx.clone()));
 
     let index = index::load(&index_file);
@@ -234,7 +241,9 @@ impl Daemon {
                 let ok = self.on_auth(id, addr);
                 let _ = reply.send(ok);
             }
-            Event::Up { id, conn, outbound, ctl, data } => self.peer_up(id, Peer { conn, outbound, ctl, data }),
+            Event::Up { id, conn, outbound, ctl, data, local } => {
+                self.peer_up(id, Peer { conn, outbound, ctl, data, local });
+            }
             Event::Down { id, conn } => self.peer_down(id, conn),
             Event::DialDone { id } => self.dial_done(id),
             Event::Redial { id } => self.dial(&id),
@@ -247,6 +256,7 @@ impl Daemon {
                 let resp = self.on_ctl(&req);
                 let _ = reply.send(resp);
             }
+            Event::NetworkChanged => self.on_network_change(),
             Event::Shutdown => self.cancel_all_downloads(),
         }
     }

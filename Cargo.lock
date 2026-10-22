@@ -689,6 +689,7 @@ dependencies = [
  "anyhow",
  "blake3",
  "clap",
+ "libc",
  "notify",
  "postcard",
  "serde",

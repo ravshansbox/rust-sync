@@ -27,7 +27,7 @@ fn download(from: &str, meta: FileMeta, tmp: &Path) -> Download {
 
 fn up(d: &mut Daemon, id: &str, conn: u64) -> mpsc::UnboundedReceiver<Msg> {
     let (ctl, rx) = mpsc::unbounded_channel();
-    d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0 });
+    d.handle(Event::Up { id: id.into(), conn, outbound: true, ctl, data: mpsc::channel(1).0, local: None });
     rx
 }
 

@@ -139,8 +139,9 @@ async fn trusted_connection_comes_up_carries_control_and_data_messages_and_goes_
     let a_side = async {
         let Some(Event::Auth { reply, .. }) = a_rx.recv().await else { panic!() };
         reply.send(true).unwrap();
-        let Some(Event::Up { id, conn, outbound: true, ctl, data }) = a_rx.recv().await else { panic!() };
+        let Some(Event::Up { id, conn, outbound: true, ctl, data, local }) = a_rx.recv().await else { panic!() };
         assert_eq!(id, b.id());
+        assert_eq!(local.map(|l| l.ip()), Some(addr.ip()));
         ctl.send(Msg::Unavailable { path: "x".into(), hash: [0; 32] }).unwrap();
         data.send(Msg::Unavailable { path: "y".into(), hash: [0; 32] }).await.unwrap();
         got_rx.await.unwrap();

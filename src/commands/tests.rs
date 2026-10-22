@@ -40,10 +40,34 @@ async fn path_remove_accepts_paths_that_no_longer_exist() {
 }
 
 #[tokio::test]
-async fn node_remove_rejects_invalid_id() {
+async fn node_remove_rejects_what_is_neither_an_id_nor_a_name_of_a_node() {
+    let _key = STATE_KEY.lock().await;
     let remove = |id: &str| run(Cmd::Node { cmd: NodeCmd::Remove { id: id.into() } });
-    assert_eq!(remove("not-an-id").await.unwrap_err().to_string(), "not a valid node ID");
-    assert_eq!(remove(&"a".repeat(63)).await.unwrap_err().to_string(), "not a valid node ID");
+    let want = |s: &str| format!("{s} is not a node ID or the name of a trusted node");
+    assert_eq!(remove("not-an-id").await.unwrap_err().to_string(), want("not-an-id"));
+    assert_eq!(remove(&"a".repeat(63)).await.unwrap_err().to_string(), want(&"a".repeat(63)));
+}
+
+#[tokio::test]
+async fn node_commands_find_the_node_by_its_name_or_alias() {
+    let _key = STATE_KEY.lock().await;
+    let (a, b) = ("ab".repeat(32), "cd".repeat(32));
+    send(Req::AddNode { id: a.clone(), addr: config::with_port("macbook") }).await.unwrap();
+    send(Req::AddAlias { id: a.clone(), addr: "macbook.local:1".into() }).await.unwrap();
+    send(Req::AddNode { id: b.clone(), addr: "shared:1".into() }).await.unwrap();
+    send(Req::AddNode { id: "ef".repeat(32), addr: "shared:1".into() }).await.unwrap();
+    let alias_rm = |id: &str, addr: &str| {
+        run(Cmd::Node { cmd: NodeCmd::Alias { cmd: AliasCmd::Remove { id: id.into(), addr: addr.into() } } })
+    };
+    alias_rm("macbook.local:1", "macbook.local:1").await.unwrap();
+    let err = alias_rm("shared:1", "x").await.unwrap_err();
+    assert_eq!(err.to_string(), "shared:1 is the name of more than one node. Use its ID.");
+    run(Cmd::Node { cmd: NodeCmd::Remove { id: "macbook".into() } }).await.unwrap();
+    let cfg = Config::load(&paths::config_file()).unwrap();
+    assert!(cfg.trusted(&a).is_none());
+    assert!(cfg.trusted(&b).is_some());
+    std::fs::remove_file(paths::config_file()).unwrap();
+    std::fs::remove_file(paths::state_dir().join("key")).unwrap();
 }
 
 #[tokio::test]
@@ -187,7 +211,7 @@ async fn node_alias_add_checks_the_id_at_the_alias_before_saving_it() {
     let want = format!("that is not the ID you gave ({}). Alias not added.", net::pretty_id(&other));
     assert_eq!(result.unwrap_err().to_string(), want);
     send(Req::AddNode { id: keys.id(), addr: "h:2".into() }).await.unwrap();
-    let (addr, result) = alias_add_to(&keys, &net::pretty_id(&keys.id())).await;
+    let (addr, result) = alias_add_to(&keys, "h:2").await;
     result.unwrap();
     let cfg = Config::load(&paths::config_file()).unwrap();
     assert_eq!(cfg.trusted(&other).unwrap().addrs().collect::<Vec<_>>(), ["h:1"]);
@@ -207,7 +231,7 @@ async fn node_alias_add_and_remove_add_the_default_port() {
     run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap();
     let rm = AliasCmd::Remove { id: "not-an-id".into(), addr: "l".into() };
     let err = run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap_err();
-    assert_eq!(err.to_string(), "not a valid node ID");
+    assert_eq!(err.to_string(), "not-an-id is not a node ID or the name of a trusted node");
     let rm = AliasCmd::Remove { id: id.clone(), addr: "l".into() };
     let err = run(Cmd::Node { cmd: NodeCmd::Alias { cmd: rm } }).await.unwrap_err();
     assert_eq!(err.to_string(), format!("{} is not an alias of node {}", config::with_port("l"), net::pretty_id(&id)));

@@ -47,7 +47,7 @@ pub(super) async fn alias_add(id: &str, addr: &str) -> anyhow::Result<()> {
     let keys = my_keys()?;
     let cfg = Config::load(&paths::config_file())?;
     let addr = config::with_port(addr);
-    let expected = node_id(id)?;
+    let expected = node_ref(id)?;
     let (id, _) = probe(&addr, &keys, &cfg).await?;
     outln!("Node ID: {}", net::pretty_id(&id));
     if id != expected {
@@ -67,6 +67,21 @@ fn confirm(question: &str) -> std::io::Result<bool> {
 /// Parse a node ID given on the command line.
 pub(super) fn node_id(s: &str) -> anyhow::Result<String> {
     net::parse_id(s).context("not a valid node ID")
+}
+
+/// Find a trusted node by its ID, or by its name or an alias.
+pub(super) fn node_ref(s: &str) -> anyhow::Result<String> {
+    if let Some(id) = net::parse_id(s) {
+        return Ok(id);
+    }
+    let cfg = Config::load(&paths::config_file())?;
+    let name = config::with_port(s);
+    let mut ids = cfg.trusted_nodes().filter(|(_, n)| n.addrs().any(|a| a == name)).map(|(id, _)| id.clone());
+    match (ids.next(), ids.next()) {
+        (Some(id), None) => Ok(id),
+        (Some(_), Some(_)) => bail!("{s} is the name of more than one node. Use its ID."),
+        _ => bail!("{s} is not a node ID or the name of a trusted node"),
+    }
 }
 
 /// Connect to the node at addr and return its ID and whether it trusts this node.

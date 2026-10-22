@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 mod node;
 mod path;
-use node::{alias_add, node_add, node_id};
+use node::{alias_add, node_add, node_ref};
 use path::{path_add, path_list, removal_path};
 
 /// Run one command-line command.
@@ -26,11 +26,11 @@ pub async fn run(cmd: Cmd) -> anyhow::Result<()> {
         Cmd::Node { cmd: NodeCmd::Add(a) } => node_add(a).await,
         Cmd::Node { cmd: NodeCmd::List } => send(Req::ListNodes).await,
         Cmd::Node { cmd: NodeCmd::Remove { id } } => {
-            send(Req::RemoveNode { id: node_id(&id)? }).await
+            send(Req::RemoveNode { id: node_ref(&id)? }).await
         }
         Cmd::Node { cmd: NodeCmd::Alias { cmd: AliasCmd::Add { id, addr } } } => alias_add(&id, &addr).await,
         Cmd::Node { cmd: NodeCmd::Alias { cmd: AliasCmd::Remove { id, addr } } } => {
-            send(Req::RemoveAlias { id: node_id(&id)?, addr: config::with_port(&addr) }).await
+            send(Req::RemoveAlias { id: node_ref(&id)?, addr: config::with_port(&addr) }).await
         }
         Cmd::Service { cmd: ServiceCmd::Install { system } } => service::install(system).await,
         Cmd::Service { cmd: ServiceCmd::Uninstall } => service::uninstall(),

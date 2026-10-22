@@ -66,9 +66,9 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync path remove <path>` | `path rm` | Stop syncing it. Files stay on disk |
 | `rust-sync node add <host[:port]> [--id ID] [-y]` | | Trust a node |
 | `rust-sync node list` | `node ls` | Trusted nodes, their addresses and connection state |
-| `rust-sync node remove <ID>` | `node rm` | Stop trusting a node |
-| `rust-sync node alias add <ID> <host[:port]>` | | Check the node's ID at another address and also dial it there |
-| `rust-sync node alias remove <ID> <host[:port]>` | `node alias rm` | Stop dialling a node at that address |
+| `rust-sync node remove <ID or name>` | `node rm` | Stop trusting a node |
+| `rust-sync node alias add <ID or name> <host[:port]>` | | Check the node's ID at another address and also dial it there |
+| `rust-sync node alias remove <ID or name> <host[:port]>` | `node alias rm` | Stop dialling a node at that address |
 | `rust-sync service install [--system]` | | Start the daemon at login, or at boot with `--system` (and now) |
 | `rust-sync service uninstall` | | Stop it and stop starting it automatically |
 | `rust-sync service start` | | Start the daemon now |
@@ -87,7 +87,7 @@ A node can have other addresses besides the one you added it with. For example,
 to reach `macmini` over the local network when Tailscale is down:
 
 ```sh
-rust-sync node alias add <ID> macmini.local
+rust-sync node alias add macmini macmini.local
 ```
 
 This connects to `macmini.local` and checks that the node there has that ID.

@@ -45,10 +45,30 @@ fn status_text_says_when_daemon_is_not_running() {
     assert_eq!(
         running,
         format!(
-            "This node: ABCD\nPort: {}\n\nNodes:\n{}\nPaths:\n{}",
+            "This node: ABCD\nPort: {}\n\nNodes:\n{}\nPaths:\n{}\nConflict copies:\n  (none)\n",
             cfg.port,
             nodes_text(&cfg, |_| Some(true), &none),
             paths_text(&cfg)
         )
     );
+}
+
+#[test]
+fn status_text_lists_conflict_copies_found_under_synced_paths() {
+    let dir = crate::paths::test_dir("status-conflicts");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("s/d")).unwrap();
+    for name in ["s/d/a.sync-conflict-1-aaaaaaaa.txt", "s/plain.txt", "notes.md", "notes.sync-conflict-2-bbbbbbbb.md", "other.sync-conflict-3-cccccccc.md"] {
+        std::fs::write(dir.join(name), "x").unwrap();
+    }
+    let d = dir.display();
+    let mut cfg = Config::default();
+    cfg.set_root("me", &format!("{d}/s"), true, false);
+    cfg.set_root("me", &format!("{d}/notes.md"), false, false);
+    let text = status_text(&cfg, "abcd", |_| Some(true), &BTreeMap::new());
+    assert!(
+        text.ends_with(&format!("\nConflict copies:\n  {d}/notes.sync-conflict-2-bbbbbbbb.md\n  {d}/s/d/a.sync-conflict-1-aaaaaaaa.txt\n")),
+        "{text}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -34,6 +34,17 @@ pub(super) fn loaded(mode: Mode) -> anyhow::Result<bool> {
     Ok(out.status.success())
 }
 
+/// Whether launchd still has a process for the job, for example one that is saving its index before exiting.
+pub(super) fn has_process(mode: Mode) -> anyhow::Result<bool> {
+    let out = Command::new("launchctl").args(["print", &mode.target()?]).output().context("cannot run launchctl")?;
+    Ok(out.status.success() && shows_process(&String::from_utf8_lossy(&out.stdout)))
+}
+
+/// Whether `launchctl print` output has the job's own `pid` line.
+fn shows_process(print: &str) -> bool {
+    print.lines().any(|line| line.starts_with("\tpid = "))
+}
+
 /// Unload the job and wait until the daemon has exited.
 fn unload(mode: Mode) -> anyhow::Result<()> {
     // Fails harmlessly if the job is not loaded.
@@ -79,3 +90,6 @@ fn launchctl(mode: Mode, args: &[&str]) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

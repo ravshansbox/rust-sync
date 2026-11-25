@@ -18,7 +18,7 @@ mod launchd;
 mod mode;
 mod plist;
 
-use launchd::{bootstrap, bootstrap_with_retry, kickstart, kill, loaded, unload_installed};
+use launchd::{bootstrap, bootstrap_with_retry, has_process, kickstart, kill, loaded, unload_installed};
 use mode::{Mode, sudo_login, uid};
 use plist::{plist_xml, write_plist};
 
@@ -148,7 +148,21 @@ async fn stop_now(mode: Mode) -> anyhow::Result<()> {
     if !wait_for(false).await? {
         bail!("still running. If you started it with `rust-sync daemon`, stop it there with Ctrl-C.");
     }
+    if !wait_for_exit(mode).await? {
+        bail!("did not exit. See the log: {}", log_path().display());
+    }
     Ok(())
+}
+
+/// Wait up to 5 seconds for launchd to have no process for the job, so starting it again is not ignored.
+async fn wait_for_exit(mode: Mode) -> anyhow::Result<bool> {
+    for _ in 0..POLL_TRIES {
+        if !has_process(mode)? {
+            return Ok(true);
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+    Ok(false)
 }
 
 /// Start the daemon through launchd and wait until it answers.

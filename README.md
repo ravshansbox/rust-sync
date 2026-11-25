@@ -74,7 +74,7 @@ others learn about C from that machine and connect to it by themselves.
 | `rust-sync service start` | | Start the daemon now |
 | `rust-sync service stop` | | Stop the daemon now; it starts again at the next login or boot |
 | `rust-sync service restart` | | Stop and start it, for example after an upgrade |
-| `rust-sync status` | | Nodes, paths, connections, pending requests |
+| `rust-sync status` | | Nodes, paths, connections, pending requests, conflict copies |
 | `rust-sync id` | | This node's ID |
 
 If the daemon isn't running, `path add`, `path remove`, `node add`,
@@ -108,7 +108,7 @@ on macOS; see [macOS Local Network privacy](#macos-local-network-privacy).
   file at the same time.
 - **Conflicts:** the version with the newer mtime wins (an edit always beats a
   delete). The losing version is kept next to it as
-  `name.sync-conflict-<time>-<node>.ext`.
+  `name.sync-conflict-<time>-<node>.ext`. `rust-sync status` lists these copies.
 - **Deletions** are recorded, so a machine that was offline doesn't bring a
   deleted file back.
 - **Transfers:** whole files, in 32 KiB chunks, at most 8 at a time. Files are
